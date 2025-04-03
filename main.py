@@ -112,15 +112,23 @@ def main():
     if args.server:
         if console.client.connect_server(args.server):
             print(f"Connected to server: {args.server}")
+            # List tools
+            tools = console.client.list_tools(args.server)
+            print(f"Tools available from server: {args.server}")
+            for tool in tools:
+                print(f"- {tool.get('name', '')}: {tool.get('description', '')}")
         else:
             print(f"Failed to connect to server: {args.server}")
     
-    # Run the console
-    try:
-        console.cmdloop()
-    except KeyboardInterrupt:
-        print("\nExiting...")
-    finally:
+    # Run the console if not in test mode
+    if not args.server:
+        try:
+            console.cmdloop()
+        except KeyboardInterrupt:
+            print("\nExiting...")
+        finally:
+            console.client.close()
+    else:
         console.client.close()
 
 

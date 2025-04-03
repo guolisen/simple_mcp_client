@@ -6,7 +6,9 @@ from typing import Dict, List, Optional, Any, Union
 import json
 
 try:
-    from mcp.client.session import ClientSession as MCPClient
+    from mcp import stdio_client, StdioServerParameters
+    from mcp.client.sse import sse_client
+    from mcp.client.session import ClientSession
     from mcp.types import Resource, ResourceTemplate
 except ImportError:
     logging.error("MCP package not installed. Install it with 'pip install mcp'.")
@@ -27,8 +29,9 @@ class MCPServer:
         """
         self.name = name
         self.config = config
-        self.client: Optional[MCPClient] = None
+        self.client: Optional[ClientSession] = None
         self.stdio_process: Optional[subprocess.Popen] = None
+        self._client_task = None
     
     def connect(self) -> bool:
         """Connect to the MCP server.
@@ -40,28 +43,43 @@ class MCPServer:
             return True
         
         try:
+            import asyncio
+            
+            # Create a new event loop for async operations
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
             if self.config.transport == "sse":
-                # Connect to SSE server
-                self.client = MCPClient(self.config.url)
+                # Connect to SSE server using sse_client context manager
+                client_context = sse_client(self.config.url)
+                read_stream, write_stream = loop.run_until_complete(client_context.__aenter__())
+                self.client = ClientSession(read_stream, write_stream)
+                self._client_task = (client_context, loop)
+                
+                # Initialize the client
+                loop.run_until_complete(self.client.initialize())
                 return True
+                
             elif self.config.transport == "stdio":
                 # Start stdio server process
                 if not self.config.stdio_command:
                     logging.error(f"No stdio command provided for server {self.name}")
                     return False
                 
-                self.stdio_process = subprocess.Popen(
-                    self.config.stdio_command,
-                    shell=True,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    bufsize=1
+                # Create StdioServerParameters
+                server_params = StdioServerParameters(
+                    command=self.config.stdio_command.split()[0],
+                    args=self.config.stdio_command.split()[1:] if len(self.config.stdio_command.split()) > 1 else []
                 )
                 
-                # Connect to stdio server
-                self.client = MCPClient(f"stdio://{self.name}")
+                # Connect to stdio server using stdio_client context manager
+                client_context = stdio_client(server_params)
+                read_stream, write_stream = loop.run_until_complete(client_context.__aenter__())
+                self.client = ClientSession(read_stream, write_stream)
+                self._client_task = (client_context, loop)
+                
+                # Initialize the client
+                loop.run_until_complete(self.client.initialize())
                 return True
             else:
                 logging.error(f"Unsupported transport type: {self.config.transport}")
@@ -74,24 +92,15 @@ class MCPServer:
         """Disconnect from the MCP server."""
         if self.client:
             try:
-                self.client.close()
+                if self._client_task:
+                    client_context, loop = self._client_task
+                    # Close the client context
+                    loop.run_until_complete(client_context.__aexit__(None, None, None))
+                    self._client_task = None
             except Exception as e:
                 logging.error(f"Error closing MCP client for server {self.name}: {e}")
             finally:
                 self.client = None
-        
-        if self.stdio_process:
-            try:
-                self.stdio_process.terminate()
-                self.stdio_process.wait(timeout=5)
-            except Exception as e:
-                logging.error(f"Error terminating stdio process for server {self.name}: {e}")
-                try:
-                    self.stdio_process.kill()
-                except Exception:
-                    pass
-            finally:
-                self.stdio_process = None
     
     def is_connected(self) -> bool:
         """Check if connected to the MCP server.
@@ -108,14 +117,23 @@ class MCPServer:
             List of tool information.
         """
         if not self.is_connected():
+            logging.info(f"Not connected to server {self.name}, attempting to connect")
             if not self.connect():
+                logging.error(f"Failed to connect to server {self.name}")
                 return []
         
         try:
-            response = self.client.list_tools()
+            logging.info(f"Listing tools for server {self.name}")
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            response = loop.run_until_complete(self.client.list_tools())
+            logging.info(f"Got response from server {self.name}: {response}")
             return response.get("tools", [])
         except Exception as e:
             logging.error(f"Error listing tools for server {self.name}: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
             return []
     
     def call_tool(self, tool_name: str, arguments: Dict[str, Any] = None) -> Any:
