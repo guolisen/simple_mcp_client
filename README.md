@@ -1,164 +1,125 @@
-# MCP Client
+# Simple MCP Client
 
-A command-line client for interacting with Model Context Protocol (MCP) servers with LLM integration.
+A simple command-line MCP (Model Context Protocol) client for testing MCP servers using Python. It supports chatting with various LLM providers and connecting to multiple MCP servers.
 
 ## Features
 
-- Connect to MCP servers using SSE or stdio transport
-- Support for multiple LLM providers:
-  - OpenAI (GPT-3.5, GPT-4)
-  - Ollama (local models like Llama, Mistral)
-  - Deepseek
-  - OpenRouter (Claude, Gemini, and more)
-- Interactive console interface
-- Call MCP tools and access MCP resources
-- Chat with LLMs using MCP context
-- Configurable via YAML config files and environment variables
+- Connect to multiple MCP servers (SSE and stdio protocols)
+- Integrate with different LLM providers (Ollama, DeepSeek, OpenAI, OpenRouter)
+- Interactive command-line interface with auto-completion
+- Command-based tool execution
+- Chat mode with LLM-driven tool execution
+- Configurable via JSON configuration files
 
 ## Installation
 
-1. Clone the repository:
+There are several ways to install the client:
+
+### Using UV (recommended)
 
 ```bash
-git clone https://github.com/yourusername/mcp-client.git
-cd mcp-client
+uv venv
+source .venv/bin/activate
+uv pip install -e .
 ```
 
-2. Install dependencies:
+### Using pip with requirements.txt
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+pip install -e .
+```
+
+### Using pip directly
+
+```bash
+pip install -e .
+```
+
+### Using pip with pyproject.toml
+
+```bash
+pip install .
 ```
 
 ## Configuration
 
-The client can be configured using a YAML configuration file. By default, it looks for configuration in the following locations:
+The client uses a configuration file to define LLM providers and MCP servers. By default, it looks for `config.json` in the current directory, or it creates one with default values.
 
-- `./config.yaml`
-- `./config/config.yaml`
-- `./config/default_config.yaml`
-- `/etc/mcp-client/config.yaml`
-- `~/.config/mcp-client/config.yaml`
+Example configuration:
 
-You can also specify a configuration file using the `--config` command-line option.
-
-### Example Configuration
-
-```yaml
-# LLM provider configuration
-llm:
-  provider: openai  # Options: ollama, deepseek, openai, openrouter
-  model: gpt-4      # Default model for the selected provider
-  api_key: ""       # API key for providers that require it
-  api_base: ""      # Optional API base URL override
-  
-  # Provider-specific configurations
-  ollama:
-    host: "http://localhost:11434"
-    models:
-      - llama3
-      - mistral
-      - gemma
-  
-  deepseek:
-    models:
-      - deepseek-chat
-      - deepseek-coder
-  
-  openai:
-    models:
-      - gpt-4
-      - gpt-3.5-turbo
-  
-  openrouter:
-    models:
-      - anthropic/claude-3-opus
-      - google/gemini-pro
-      - meta-llama/llama-3-70b-instruct
-
-# MCP server configurations
-mcp_servers:
-  k8s_server:  # Default K8s server
-    url: "http://localhost:8000"  # SSE transport URL
-    transport: "sse"              # Transport type: "sse" or "stdio"
-    enabled: true                 # Whether this server is enabled
-    default: true                 # Whether this is the default server
-    # stdio_command: "python -m mcp_k8s_server"  # Command to start the server in stdio mode
-
-# Console configuration
-console:
-  history_file: "~/.mcp_client_history"  # Command history file
-  log_level: "info"                      # Logging level: debug, info, warning, error
-  max_history: 1000                      # Maximum number of history entries to keep
-  prompt: "mcp> "                        # Console prompt
+```json
+{
+  "llm": {
+    "provider": "ollama",
+    "model": "llama3",
+    "api_url": "http://localhost:11434/api",
+    "api_key": null,
+    "other_params": {
+      "temperature": 0.7,
+      "max_tokens": 4096
+    }
+  },
+  "mcpServers": {
+    "k8s": {
+      "type": "sse",
+      "url": "http://192.168.182.128:8000/sse",
+      "command": null,
+      "args": [],
+      "env": {}
+    }
+  },
+  "default_server": "k8s"
+}
 ```
 
 ## Usage
 
-### Starting the Client
+Start the client:
 
 ```bash
-# Start with default configuration
-python main.py
-
-# Start with a specific configuration file
-python main.py --config custom_config.yaml
-
-# Start with a specific LLM provider
-python main.py --llm openai --model gpt-4
-
-# Start with debug logging
-python main.py --debug
-
-# Add a new MCP server
-python main.py --add-server k8s:http://localhost:8000:sse
+simple-mcp-client
 ```
 
-### Console Commands
+Or run it directly:
 
-Once the client is running, you can use the following commands:
-
-- `help`: Show help
-- `exit`, `quit`: Exit the console
-- `chat [message]`: Start a chat with the configured LLM
-- `servers`: List configured MCP servers
-- `connect [server_name]`: Connect to an MCP server
-- `disconnect [server_name]`: Disconnect from an MCP server
-- `tools [server_name]`: List available tools from connected servers
-- `call <tool_name> [arguments] [server_name]`: Call a tool on a connected server
-- `resources [server_name]`: List available resources from connected servers
-- `read <uri> [server_name]`: Read a resource from a connected server
-- `llm [provider] [model]`: Show or set the current LLM provider and model
-- `providers`: List available LLM providers
-- `models [provider]`: List available LLM models for a provider
-- `config [section] [key] [value]`: Show or modify configuration
-- `save [path]`: Save configuration to file
-- `clear`: Clear the screen
-
-### Environment Variables
-
-The client supports the following environment variables:
-
-- `MCP_CLIENT_CONFIG`: Path to configuration file
-- `MCP_CLIENT_LLM_PROVIDER`: LLM provider to use
-- `MCP_CLIENT_LLM_MODEL`: LLM model to use
-- `MCP_CLIENT_LLM_API_KEY`: API key for LLM provider
-- `MCP_CLIENT_LLM_API_BASE`: API base URL for LLM provider
-- `MCP_CLIENT_OLLAMA_HOST`: Host URL for Ollama
-- `MCP_CLIENT_CONSOLE_LOG_LEVEL`: Log level for console
-
-## Examples
-
-### Connecting to an MCP Server
-
-```
-mcp> connect k8s_server
-Connected to server: k8s_server
+```bash
+python -m simple_mcp_client.main
 ```
 
-### Listing Available Tools
+## Available Commands
 
-```
-mcp> tools
-Tools available from server: k8s_server
-┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- `help`: Show help message
+- `connect <server_name>`: Connect to an MCP server
+- `disconnect <server_name>`: Disconnect from an MCP server
+- `servers`: List available MCP servers
+- `tools [server_name]`: List available tools, optionally from a specific server
+- `resources [server_name]`: List available resources, optionally from a specific server
+- `execute <server_name> <tool_name> [arg1=val1 ...]`: Execute a specific tool with arguments
+- `chat`: Start a chat session with the configured LLM and active MCP tools
+- `config show`: Show current configuration
+- `config llm <provider> [model=<model>] [api_url=<url>] [api_key=<key>] [param=value ...]`: Configure LLM provider
+- `reload`: Reload configuration from file
+- `exit`: Exit the program
+
+## Environment Variables
+
+- `MCP_LOG_LEVEL`: Set logging level (default: INFO)
+- `OPENAI_API_KEY`: OpenAI API key (for OpenAI provider)
+- `DEEPSEEK_API_KEY`: DeepSeek API key (for DeepSeek provider)
+- `OPENROUTER_API_KEY`: OpenRouter API key (for OpenRouter provider)
+
+## LLM Providers
+
+The client supports the following LLM providers:
+
+- **Ollama**: Local LLM provider
+- **OpenAI**: API-based LLM provider 
+- **DeepSeek**: API-based LLM provider
+- **OpenRouter**: API-based LLM provider that supports multiple LLM backends
+
+## License
+
+MIT
