@@ -3,7 +3,7 @@
     "provider": "openai",
     "model": "GLM-4-Flash",
     "api_url": "https://open.bigmodel.cn/api/paas/v4",
-    "api_key": "",
+    "api_key": "fd69c68ffab3452da1e00bbf6bd4c915.axvFwrXXiDDnJXKx",
     "other_params": {
       "temperature": 0.7,
       "max_tokens": 4096
@@ -12,7 +12,7 @@
   "mcpServers": {
     "k8s": {
       "type": "sse",
-      "url": "http://192.168.182.128:8000/sse",
+      "url": "http://172.19.0.2:32395/sse",
       "command": null,
       "args": [],
       "env": {}
