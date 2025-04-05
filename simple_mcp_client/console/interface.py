@@ -503,9 +503,16 @@ class ConsoleInterface:
             self.console.print(f"[red]Error: Tool '{tool_name}' not found on server '{server_name}'[/red]")
             return
         
-        with self.console.status(f"[bold green]Executing {tool_name} on {server_name}...[/bold green]"):
+        try:
+            # Use a new context for the status indicator to ensure it's properly managed
+            status_context = self.console.status(f"[bold green]Executing {tool_name} on {server_name}...[/bold green]")
+            status_context.__enter__()
+            
             try:
                 result = await server.execute_tool(tool_name, tool_args)
+                # Exit the status context before printing results
+                status_context.__exit__(None, None, None)
+                
                 # Pretty print the result
                 if isinstance(result, str):
                     self.console.print(Panel(result, title=f"Result: {tool_name}", border_style="green"))
@@ -513,7 +520,12 @@ class ConsoleInterface:
                     formatted_result = self._serialize_complex_object(result)
                     self.console.print(Panel(formatted_result, title=f"Result: {tool_name}", border_style="green"))
             except Exception as e:
+                # Make sure status is cleared even on error
+                status_context.__exit__(None, None, None)
                 self.console.print(f"[red]Error executing tool: {str(e)}[/red]")
+        except Exception as outer_e:
+            # Handle any issues with the status context itself
+            self.console.print(f"[red]Error setting up execution environment: {str(outer_e)}[/red]")
     
     async def _cmd_chat(self, args: str) -> None:
         """Handle the chat command.
@@ -590,9 +602,20 @@ class ConsoleInterface:
             
             messages.append({"role": "user", "content": user_input})
             
-            # Get LLM response
-            with self.console.status("[bold green]Thinking...[/bold green]"):
+            # Get LLM response - use explicit context management to avoid conflicts
+            try:
+                status = self.console.status("[bold green]Thinking...[/bold green]")
+                status.__enter__()
                 llm_response = await self.llm_provider.get_response(messages)
+                status.__exit__(None, None, None)
+            except Exception as e:
+                # Ensure status is cleared even on error
+                try:
+                    status.__exit__(None, None, None)
+                except:
+                    pass
+                self.console.print(f"[red]Error getting LLM response: {str(e)}[/red]")
+                continue
             
             # Check if response is a tool call
             try:
@@ -606,36 +629,39 @@ class ConsoleInterface:
                     ))
                     
                     try:
-                        with self.console.status(f"[bold green]Executing {tool_call['tool']}...[/bold green]"):
-                            result = await self.server_manager.execute_tool(
-                                tool_call["tool"],
-                                tool_call["arguments"]
-                            )
-                            
-                            # Add assistant message to history
-                            messages.append({"role": "assistant", "content": llm_response})
-                            
-                            # Add system message with tool result
-                            if isinstance(result, str):
-                                result_str = f"Tool execution result: {result}"
-                            else:
-                                formatted_result = self._serialize_complex_object(result)
-                                result_str = f"Tool execution result: {formatted_result}"
-                            messages.append({"role": "system", "content": result_str})
-                            
-                            # Get final response from LLM
-                            with self.console.status("[bold green]Processing result...[/bold green]"):
-                                final_response = await self.llm_provider.get_response(messages)
-                            
-                            self.console.print(Panel(
-                                Markdown(final_response),
-                                title="Assistant",
-                                border_style="green"
-                            ))
-                            
-                            # Add final response to messages
-                            messages.append({"role": "assistant", "content": final_response})
-                            
+                        # Execute the tool without a status indicator
+                        # (avoid nested live displays)
+                        self.console.print(f"[bold green]Executing {tool_call['tool']}...[/bold green]")
+                        result = await self.server_manager.execute_tool(
+                            tool_call["tool"],
+                            tool_call["arguments"]
+                        )
+                        
+                        # Add assistant message to history
+                        messages.append({"role": "assistant", "content": llm_response})
+                        
+                        # Add system message with tool result
+                        if isinstance(result, str):
+                            result_str = f"Tool execution result: {result}"
+                        else:
+                            formatted_result = self._serialize_complex_object(result)
+                            result_str = f"Tool execution result: {formatted_result}"
+                        messages.append({"role": "system", "content": result_str})
+                        
+                        # Get final response from LLM
+                        self.console.print("[bold green]Processing result...[/bold green]")
+                        self.console.print(messages)
+                        final_response = await self.llm_provider.get_response(messages)
+                        
+                        self.console.print(Panel(
+                            Markdown(final_response),
+                            title="Assistant",
+                            border_style="green"
+                        ))
+                        
+                        # Add final response to messages
+                        messages.append({"role": "assistant", "content": final_response})
+                        
                     except Exception as e:
                         error_msg = f"Error executing tool: {str(e)}"
                         self.console.print(f"[red]{error_msg}[/red]")
