@@ -559,12 +559,14 @@ class ConsoleInterface:
             '        "argument-name": "value"\n'
             "    }\n"
             "}\n\n"
-            "After receiving a tool's response:\n"
-            "1. Transform the raw data into a natural, conversational response\n"
-            "2. Keep responses concise but informative\n"
-            "3. Focus on the most relevant information\n"
-            "4. Use appropriate context from the user's question\n"
-            "5. Avoid simply repeating the raw data\n\n"
+            "Guidelines for using tools:\n"
+            "1. When a user's question requires real-time data or external information, use an appropriate tool\n"
+            "2. Format your tool call exactly as specified - it will be parsed as JSON\n"
+            "3. If the initial tool result doesn't fully answer the question, you can call another tool\n"
+            "4. After tool results are available, incorporate them into a helpful response\n\n"
+            "If you receive tool results and need to call another tool, respond ONLY with the tool call JSON. "
+            "Otherwise, provide a complete and helpful response that addresses the user's original question "
+            "using the tool result.\n\n"
             "Please use only the tools that are explicitly defined above."
         )
         
@@ -619,8 +621,19 @@ class ConsoleInterface:
             
             # Check if response is a tool call
             try:
-                tool_call = json.loads(llm_response)
-                if isinstance(tool_call, dict) and "tool" in tool_call and "arguments" in tool_call:
+                is_tool_call = False
+                try:
+                    tool_call = json.loads(llm_response)
+                    is_tool_call = (
+                        isinstance(tool_call, dict) and 
+                        "tool" in tool_call and 
+                        "arguments" in tool_call and
+                        isinstance(tool_call["arguments"], dict)
+                    )
+                except json.JSONDecodeError:
+                    is_tool_call = False
+                
+                if is_tool_call:
                     self.console.print(Panel(
                         f"[bold]Executing tool:[/bold] {tool_call['tool']}\n"
                         f"[bold]With arguments:[/bold] {json.dumps(tool_call['arguments'], indent=2)}",
@@ -629,8 +642,7 @@ class ConsoleInterface:
                     ))
                     
                     try:
-                        # Execute the tool without a status indicator
-                        # (avoid nested live displays)
+                        # Execute the tool
                         self.console.print(f"[bold green]Executing {tool_call['tool']}...[/bold green]")
                         result = await self.server_manager.execute_tool(
                             tool_call["tool"],
@@ -640,27 +652,125 @@ class ConsoleInterface:
                         # Add assistant message to history
                         messages.append({"role": "assistant", "content": llm_response})
                         
-                        # Add system message with tool result
+                        # Prepare the tool result
                         if isinstance(result, str):
-                            result_str = f"Tool execution result: {result}"
+                            formatted_result = result
                         else:
                             formatted_result = self._serialize_complex_object(result)
-                            result_str = f"Tool execution result: {formatted_result}"
-                        messages.append({"role": "system", "content": result_str})
+                        
+                        # Create a new system prompt that combines the user query with the tool result
+                        new_system_prompt = (
+                            "You are a helpful assistant with access to tools. "
+                            "A tool has been called based on the user's question, and the result is provided below. "
+                            "Create a natural, conversational response that incorporates this tool result. "
+                            "If you need to call additional tools to fully answer the question, respond ONLY with a "
+                            "JSON object in the format: {\"tool\": \"tool-name\", \"arguments\": {\"key\": \"value\"}}. "
+                            "Otherwise, provide a complete and helpful response that addresses the user's original question "
+                            "using the tool result.\n\n"
+                            f"User's original question: {user_input}\n\n"
+                            f"Tool called: {tool_call['tool']}\n"
+                            f"Tool result: {formatted_result}"
+                        )
+                        
+                        # Replace the original system message temporarily for this response
+                        original_system_message = messages[0]["content"]
+                        messages[0]["content"] = new_system_prompt
                         
                         # Get final response from LLM
                         self.console.print("[bold green]Processing result...[/bold green]")
-                        self.console.print(messages)
                         final_response = await self.llm_provider.get_response(messages)
                         
-                        self.console.print(Panel(
-                            Markdown(final_response),
-                            title="Assistant",
-                            border_style="green"
-                        ))
-                        
-                        # Add final response to messages
-                        messages.append({"role": "assistant", "content": final_response})
+                        # Check if the final response is another tool call
+                        try:
+                            another_tool_call = json.loads(final_response)
+                            is_another_tool_call = (
+                                isinstance(another_tool_call, dict) and 
+                                "tool" in another_tool_call and 
+                                "arguments" in another_tool_call and
+                                isinstance(another_tool_call["arguments"], dict)
+                            )
+                            
+                            if is_another_tool_call:
+                                # It's another tool call, so we'll display it as such
+                                self.console.print(Panel(
+                                    f"[bold]Assistant needs to call another tool:[/bold] {another_tool_call['tool']}\n"
+                                    f"[bold]With arguments:[/bold] {json.dumps(another_tool_call['arguments'], indent=2)}",
+                                    title="Assistant",
+                                    border_style="yellow"
+                                ))
+                                
+                                # Execute the second tool
+                                self.console.print(f"[bold green]Executing {another_tool_call['tool']}...[/bold green]")
+                                second_result = await self.server_manager.execute_tool(
+                                    another_tool_call["tool"],
+                                    another_tool_call["arguments"]
+                                )
+                                
+                                # Format the result
+                                if isinstance(second_result, str):
+                                    second_formatted_result = second_result
+                                else:
+                                    second_formatted_result = self._serialize_complex_object(second_result)
+                                
+                                # Update the system prompt to include both tool results
+                                combined_system_prompt = (
+                                    "You are a helpful assistant with access to tools. "
+                                    "Two tools have been called based on the user's question, and the results are provided below. "
+                                    "Create a natural, conversational response that incorporates these tool results. "
+                                    "Focus on providing a complete and helpful response that addresses the user's original question.\n\n"
+                                    f"User's original question: {user_input}\n\n"
+                                    f"First tool called: {tool_call['tool']}\n"
+                                    f"First tool result: {formatted_result}\n\n"
+                                    f"Second tool called: {another_tool_call['tool']}\n"
+                                    f"Second tool result: {second_formatted_result}"
+                                )
+                                
+                                # Update the system message
+                                messages[0]["content"] = combined_system_prompt
+                                
+                                # Get the combined final response
+                                self.console.print("[bold green]Processing combined results...[/bold green]")
+                                combined_final_response = await self.llm_provider.get_response(messages)
+                                
+                                self.console.print(Panel(
+                                    Markdown(combined_final_response),
+                                    title="Assistant",
+                                    border_style="green"
+                                ))
+                                
+                                # Add final response to messages
+                                messages.append({"role": "assistant", "content": combined_final_response})
+                                
+                                # Restore original system message
+                                messages[0]["content"] = original_system_message
+                                
+                            else:
+                                # Not a tool call, display the response
+                                self.console.print(Panel(
+                                    Markdown(final_response),
+                                    title="Assistant",
+                                    border_style="green"
+                                ))
+                                
+                                # Add final response to messages
+                                messages.append({"role": "assistant", "content": final_response})
+                                
+                                # Restore original system message
+                                messages[0]["content"] = original_system_message
+                                
+                        except json.JSONDecodeError:
+                            # Not a tool call (not valid JSON), display response directly
+                            self.console.print(Panel(
+                                Markdown(final_response),
+                                title="Assistant",
+                                border_style="green"
+                            ))
+                            
+                            # Add final response to messages
+                            messages.append({"role": "assistant", "content": final_response})
+                            
+                            # Restore original system message
+                            messages[0]["content"] = original_system_message
                         
                     except Exception as e:
                         error_msg = f"Error executing tool: {str(e)}"
@@ -680,16 +790,20 @@ class ConsoleInterface:
                     # Add response to messages
                     messages.append({"role": "assistant", "content": llm_response})
             
-            except json.JSONDecodeError:
-                # Not a tool call (not valid JSON), display response directly
-                self.console.print(Panel(
-                    Markdown(llm_response),
-                    title="Assistant",
-                    border_style="green"
-                ))
+            except Exception as e:
+                # Handle any error in the tool execution flow
+                self.console.print(f"[red]Error processing response: {str(e)}[/red]")
                 
-                # Add response to messages
-                messages.append({"role": "assistant", "content": llm_response})
+                # Display the original response if possible
+                if 'llm_response' in locals():
+                    self.console.print(Panel(
+                        Markdown(llm_response),
+                        title="Assistant (Error Processing)",
+                        border_style="red"
+                    ))
+                    
+                    # Add response to messages
+                    messages.append({"role": "assistant", "content": llm_response})
     
     async def _cmd_config(self, args: str) -> None:
         """Handle the config command.
