@@ -79,6 +79,46 @@ class CommandCompleter(Completer):
 
 class ConsoleInterface:
     """Interactive console interface for MCP client."""
+    
+    def _serialize_complex_object(self, obj: Any) -> str:
+        """Safely serialize a potentially complex object to a string.
+        
+        Args:
+            obj: The object to serialize.
+            
+        Returns:
+            A string representation of the object.
+        """
+        try:
+            # Try direct JSON serialization
+            return json.dumps(obj, indent=2)
+        except TypeError:
+            # Handle objects with __dict__
+            if hasattr(obj, "__dict__"):
+                try:
+                    obj_dict = {k: v for k, v in obj.__dict__.items() 
+                               if not k.startswith('_') and not callable(v)}
+                    return json.dumps(obj_dict, indent=2)
+                except:
+                    pass
+            
+            # Handle objects with special content structure (like CallToolResult)
+            if hasattr(obj, "content") and isinstance(obj.content, list):
+                content_text = ""
+                for item in obj.content:
+                    if hasattr(item, "text") and item.text:
+                        content_text += item.text + "\n"
+                    elif hasattr(item, "__dict__"):
+                        try:
+                            content_text += json.dumps(item.__dict__, indent=2) + "\n"
+                        except:
+                            content_text += f"[Object of type {type(item).__name__}]\n"
+                    else:
+                        content_text += str(item) + "\n"
+                return content_text
+            
+            # Last resort - string representation
+            return str(obj)
 
     def __init__(self, config: Configuration, server_manager: ServerManager) -> None:
         """Initialize the console interface.
@@ -470,7 +510,7 @@ class ConsoleInterface:
                 if isinstance(result, str):
                     self.console.print(Panel(result, title=f"Result: {tool_name}", border_style="green"))
                 else:
-                    formatted_result = json.dumps(result, indent=2)
+                    formatted_result = self._serialize_complex_object(result)
                     self.console.print(Panel(formatted_result, title=f"Result: {tool_name}", border_style="green"))
             except Exception as e:
                 self.console.print(f"[red]Error executing tool: {str(e)}[/red]")
@@ -576,7 +616,11 @@ class ConsoleInterface:
                             messages.append({"role": "assistant", "content": llm_response})
                             
                             # Add system message with tool result
-                            result_str = f"Tool execution result: {result}"
+                            if isinstance(result, str):
+                                result_str = f"Tool execution result: {result}"
+                            else:
+                                formatted_result = self._serialize_complex_object(result)
+                                result_str = f"Tool execution result: {formatted_result}"
                             messages.append({"role": "system", "content": result_str})
                             
                             # Get final response from LLM
