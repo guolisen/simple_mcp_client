@@ -53,10 +53,10 @@ Example configuration:
 ```json
 {
   "llm": {
-    "provider": "ollama",
-    "model": "llama3",
-    "api_url": "http://localhost:11434/api",
-    "api_key": null,
+    "provider": "openai",
+    "model": "claude-3-7-sonnet-20250219",
+    "api_url": "https://api.gptoai.top/v1",
+    "api_key": "",
     "other_params": {
       "temperature": 0.7,
       "max_tokens": 4096
@@ -100,6 +100,8 @@ python -m simple_mcp_client.main
 - `prompts [server_name]`: List available prompts, optionally from a specific server
 - `formats [server_name]`: List available prompt formats, optionally from a specific server
 - `execute <server_name> <tool_name> [arg1=val1 ...]`: Execute a specific tool with arguments
+- `get-resource [server_name] <resource_uri>`: Get a resource from an MCP server
+- `get-prompt [server_name] <prompt_name> [format=<format_name>] [arg1=val1 ...]`: Get a prompt from an MCP server
 - `chat`: Start a chat session with the configured LLM and active MCP tools
 - `config show`: Show current configuration
 - `config llm <provider> [model=<model>] [api_url=<url>] [api_key=<key>] [param=value ...]`: Configure LLM provider
@@ -124,19 +126,23 @@ resources k8s
 
 Output example:
 ```
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     All Available Resources - Direct Resources     ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ URI                  │ Name                │ MIME Type         │
-│ k8s://pods/default  │ Default namespace pods │ application/json │
-└────────────────────┴─────────────────────┴──────────────────┘
-
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃     All Available Resources - Resource Templates     ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ URI Template       │ Name                  │ MIME Type         │
-│ k8s://pods/{namespace} │ Pods in namespace    │ application/json │
-└────────────────────┴───────────────────────┴──────────────────┘
+             Resources from k8s - Direct Resources             
+┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃ URI              ┃ Name                  ┃ MIME Type        ┃
+┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│ k8s://namespaces │ Kubernetes Namespaces │ application/json │
+│ k8s://resources  │ Kubernetes Resources  │ application/json │
+└──────────────────┴───────────────────────┴──────────────────┘
+                           Resources from k8s - Resource Templates                           
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ URI Template                             ┃ Name                           ┃ MIME Type     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+│ k8s:///{namespace}                       │ Namespace Overview             │ Not specified │
+│ k8s:///{resource_type}                   │ Cluster-Scoped Resources       │ Not specified │
+│ k8s:///{resource_type}/{name}            │ Cluster-Scoped Resource        │ Not specified │
+│ k8s://{namespace}/{resource_type}        │ Resources by Type in Namespace │ Not specified │
+│ k8s://{namespace}/{resource_type}/{name} │ Namespaced Resource            │ Not specified │
+└──────────────────────────────────────────┴────────────────────────────────┴───────────────┘
 ```
 
 ### Prompts Command
@@ -164,6 +170,44 @@ Output example:
 └────────────────────┴─────────────────────────────────┘
 ```
 
+### Get-Resource Command
+
+The `get-resource` command retrieves a resource from an MCP server.
+
+Get a resource from any server that has it:
+```bash
+get-resource k8s://pods/default
+```
+
+Get a resource from a specific server:
+```bash
+get-resource k8s k8s://pods/default
+```
+
+### Get-Prompt Command
+
+The `get-prompt` command retrieves a prompt from an MCP server, with optional formatting and arguments.
+
+Get a prompt from any server that has it:
+```bash
+get-prompt k8s-describe
+```
+
+Get a prompt from a specific server:
+```bash
+get-prompt k8s k8s-describe
+```
+
+Get a prompt with a specific format:
+```bash
+get-prompt k8s-describe format=markdown
+```
+
+Get a prompt with arguments:
+```bash
+get-prompt k8s k8s-describe namespace=default resource=pod name=my-pod
+```
+
 ## Environment Variables
 
 - `MCP_LOG_LEVEL`: Set logging level (default: INFO)
@@ -175,10 +219,25 @@ Output example:
 
 The client supports the following LLM providers:
 
-- **Ollama**: Local LLM provider
-- **OpenAI**: API-based LLM provider 
-- **DeepSeek**: API-based LLM provider
-- **OpenRouter**: API-based LLM provider that supports multiple LLM backends
+- **Ollama**: Local LLM provider for running open-source models locally
+- **OpenAI**: API-based LLM provider for accessing OpenAI's models
+- **DeepSeek**: API-based LLM provider for accessing DeepSeek's models
+- **OpenRouter**: API-based LLM provider that routes requests to multiple LLM backends, providing access to a wide range of models from different providers through a unified API
+
+### Provider-Specific Configuration
+
+#### DeepSeek
+
+DeepSeek requires an API key which can be provided either in the configuration file or as an environment variable (`DEEPSEEK_API_KEY`). The default API URL is `https://api.deepseek.com/v1`.
+
+#### OpenRouter
+
+OpenRouter requires an API key which can be provided either in the configuration file or as an environment variable (`OPENROUTER_API_KEY`). The default API URL is `https://openrouter.ai/api/v1`. 
+
+OpenRouter supports additional parameters such as:
+
+- `http_referer`: The HTTP referer to use when making requests (default: "https://github.com/simple_mcp_client")
+- `app_name`: The name of the application to use when making requests (default: "Simple MCP Client")
 
 ## License
 
