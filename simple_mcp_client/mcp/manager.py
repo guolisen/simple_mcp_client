@@ -141,6 +141,42 @@ class ServerManager:
         for server in self.get_connected_servers():
             tools.extend(server.tools)
         return tools
+    
+    def get_all_prompts(self) -> List['Prompt']:
+        """Get all prompts from all connected servers.
+        
+        Returns:
+            A list of all prompts.
+        """
+        prompts = []
+        for server in self.get_connected_servers():
+            prompts.extend(server.prompts)
+        return prompts
+    
+    def get_all_prompt_formats(self) -> List['PromptFormat']:
+        """Get all prompt formats from all connected servers.
+        
+        Returns:
+            A list of all prompt formats.
+        """
+        formats = []
+        for server in self.get_connected_servers():
+            formats.extend(server.prompt_formats)
+        return formats
+    
+    def get_server_with_prompt(self, prompt_name: str) -> Optional[MCPServer]:
+        """Find a server that has a prompt with the given name.
+        
+        Args:
+            prompt_name: The name of the prompt to find.
+            
+        Returns:
+            The server that has the prompt if found, None otherwise.
+        """
+        for server in self.get_connected_servers():
+            if any(prompt.name == prompt_name for prompt in server.prompts):
+                return server
+        return None
 
     async def execute_tool(self, tool_name: str, arguments: Dict[str, Any],
                           server_name: Optional[str] = None) -> Any:

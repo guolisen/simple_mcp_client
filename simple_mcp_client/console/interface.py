@@ -162,6 +162,16 @@ class ConsoleInterface:
                 "handler": self._cmd_resources,
                 "arg_completer": self._complete_connected_server_names,
             },
+            "prompts": {
+                "description": "List available prompts",
+                "handler": self._cmd_prompts,
+                "arg_completer": self._complete_connected_server_names,
+            },
+            "formats": {
+                "description": "List available prompt formats",
+                "handler": self._cmd_formats,
+                "arg_completer": self._complete_connected_server_names,
+            },
             "execute": {
                 "description": "Execute a tool",
                 "handler": self._cmd_execute,
@@ -425,12 +435,25 @@ class ConsoleInterface:
             table.add_column("Name", style="green")
             table.add_column("MIME Type", style="blue")
             
-            for resource in sorted(resources, key=lambda r: r.uri):
-                table.add_row(
-                    resource.uri,
-                    resource.name,
-                    resource.mime_type or "[italic]Not specified[/italic]"
-                )
+            try:
+                # Sort resources safely, with a fallback for any sorting errors
+                try:
+                    sorted_resources = sorted(resources, key=lambda r: r.uri)
+                except Exception:
+                    self.console.print("[yellow]Warning: Unable to sort resources. Displaying in original order.[/yellow]")
+                    sorted_resources = resources
+                
+                for resource in sorted_resources:
+                    try:
+                        table.add_row(
+                            resource.uri,
+                            resource.name,
+                            resource.mime_type or "[italic]Not specified[/italic]"
+                        )
+                    except Exception as row_err:
+                        self.console.print(f"[yellow]Warning: Unable to display resource: {row_err}[/yellow]")
+            except Exception as table_err:
+                self.console.print(f"[red]Error displaying resources table: {table_err}[/red]")
             
             self.console.print(table)
         
@@ -440,14 +463,112 @@ class ConsoleInterface:
             table.add_column("Name", style="green")
             table.add_column("MIME Type", style="blue")
             
-            for template in sorted(templates, key=lambda t: t.uri_template):
-                table.add_row(
-                    template.uri_template,
-                    template.name,
-                    template.mime_type or "[italic]Not specified[/italic]"
-                )
+            try:
+                # Sort templates safely, with a fallback for any sorting errors
+                try:
+                    sorted_templates = sorted(templates, key=lambda t: t.uri_template)
+                except Exception:
+                    self.console.print("[yellow]Warning: Unable to sort templates. Displaying in original order.[/yellow]")
+                    sorted_templates = templates
+                
+                for template in sorted_templates:
+                    try:
+                        table.add_row(
+                            template.uri_template,
+                            template.name,
+                            template.mime_type or "[italic]Not specified[/italic]"
+                        )
+                    except Exception as row_err:
+                        self.console.print(f"[yellow]Warning: Unable to display resource template: {row_err}[/yellow]")
+            except Exception as table_err:
+                self.console.print(f"[red]Error displaying template table: {table_err}[/red]")
             
             self.console.print(table)
+    
+    async def _cmd_prompts(self, args: str) -> None:
+        """Handle the prompts command.
+        
+        Args:
+            args: Command arguments.
+        """
+        args = args.strip()
+        
+        if args:
+            # List prompts for a specific server
+            server_name = args
+            server = self.server_manager.get_server(server_name)
+            
+            if not server:
+                self.console.print(f"[red]Error: Server '{server_name}' not found[/red]")
+                return
+            
+            if not server.is_connected:
+                self.console.print(f"[red]Error: Server '{server_name}' is not connected[/red]")
+                return
+            
+            prompts = server.prompts
+            title = f"Prompts from {server_name}"
+        else:
+            # List all prompts from all servers
+            prompts = self.server_manager.get_all_prompts()
+            title = "All Available Prompts"
+        
+        if not prompts:
+            self.console.print("[yellow]No prompts available[/yellow]")
+            return
+        
+        table = Table(title=title)
+        table.add_column("Name", style="cyan")
+        table.add_column("Description", style="green")
+        
+        for prompt in sorted(prompts, key=lambda p: p.name):
+            table.add_row(prompt.name, prompt.description)
+        
+        self.console.print(table)
+    
+    async def _cmd_formats(self, args: str) -> None:
+        """Handle the formats command.
+        
+        Args:
+            args: Command arguments.
+        """
+        args = args.strip()
+        
+        if args:
+            # List prompt formats for a specific server
+            server_name = args
+            server = self.server_manager.get_server(server_name)
+            
+            if not server:
+                self.console.print(f"[red]Error: Server '{server_name}' not found[/red]")
+                return
+            
+            if not server.is_connected:
+                self.console.print(f"[red]Error: Server '{server_name}' is not connected[/red]")
+                return
+            
+            formats = server.prompt_formats
+            title = f"Prompt Formats from {server_name}"
+        else:
+            # List all prompt formats from all servers
+            formats = self.server_manager.get_all_prompt_formats()
+            title = "All Available Prompt Formats"
+        
+        if not formats:
+            self.console.print("[yellow]No prompt formats available[/yellow]")
+            return
+        
+        table = Table(title=title)
+        table.add_column("Name", style="cyan")
+        table.add_column("Description", style="green")
+        
+        for format in sorted(formats, key=lambda f: f.name):
+            table.add_row(
+                format.name,
+                format.description or "[italic]No description[/italic]"
+            )
+        
+        self.console.print(table)
     
     async def _cmd_execute(self, args: str) -> None:
         """Handle the execute command.

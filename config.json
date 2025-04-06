@@ -12,7 +12,7 @@
   "mcpServers": {
     "k8s": {
       "type": "sse",
-      "url": "http://172.19.0.2:32395/sse",
+      "url": "http://192.168.182.128:8000/sse",
       "command": null,
       "args": [],
       "env": {}

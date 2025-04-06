@@ -70,7 +70,8 @@ class Resource:
             mime_type: The MIME type of the resource.
             description: The description of the resource.
         """
-        self.uri: str = uri
+        # Ensure uri is a string
+        self.uri: str = str(uri) if uri is not None else ""
         self.name: str = name
         self.mime_type: Optional[str] = mime_type
         self.description: Optional[str] = description
@@ -90,10 +91,70 @@ class ResourceTemplate:
             mime_type: The MIME type of the resource.
             description: The description of the resource.
         """
-        self.uri_template: str = uri_template
+        # Ensure uri_template is a string
+        self.uri_template: str = str(uri_template) if uri_template is not None else ""
         self.name: str = name
         self.mime_type: Optional[str] = mime_type
         self.description: Optional[str] = description
+
+
+class Prompt:
+    """Represents a prompt with its properties."""
+
+    def __init__(
+        self, name: str, description: str, input_schema: Dict[str, Any]
+    ) -> None:
+        """Initialize a Prompt instance.
+        
+        Args:
+            name: The name of the prompt.
+            description: The description of the prompt.
+            input_schema: The JSON schema for the prompt's input.
+        """
+        self.name: str = name
+        self.description: str = description
+        self.input_schema: Dict[str, Any] = input_schema
+
+    def format_for_llm(self) -> str:
+        """Format prompt information for LLM.
+
+        Returns:
+            A formatted string describing the prompt.
+        """
+        args_desc = []
+        if "properties" in self.input_schema:
+            for param_name, param_info in self.input_schema["properties"].items():
+                arg_desc = (
+                    f"- {param_name}: {param_info.get('description', 'No description')}"
+                )
+                if param_name in self.input_schema.get("required", []):
+                    arg_desc += " (required)"
+                args_desc.append(arg_desc)
+
+        return f"""
+Prompt: {self.name}
+Description: {self.description}
+Arguments:
+{chr(10).join(args_desc)}
+"""
+
+
+class PromptFormat:
+    """Represents a prompt format with its properties."""
+
+    def __init__(
+        self, name: str, description: Optional[str] = None, schema: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """Initialize a PromptFormat instance.
+        
+        Args:
+            name: The name of the format.
+            description: The description of the format.
+            schema: The schema describing the format.
+        """
+        self.name: str = name
+        self.description: Optional[str] = description
+        self.schema: Optional[Dict[str, Any]] = schema
 
 
 class MCPServer:
@@ -114,6 +175,8 @@ class MCPServer:
         self._tools: List[Tool] = []
         self._resources: List[Resource] = []
         self._resource_templates: List[ResourceTemplate] = []
+        self._prompts: List[Prompt] = []
+        self._prompt_formats: List[PromptFormat] = []
         self._server_info: Optional[Implementation] = None
         self._connected: bool = False
 
@@ -161,6 +224,24 @@ class MCPServer:
             The list of available resource templates.
         """
         return self._resource_templates
+    
+    @property
+    def prompts(self) -> List[Prompt]:
+        """Get the list of available prompts.
+        
+        Returns:
+            The list of available prompts.
+        """
+        return self._prompts
+    
+    @property
+    def prompt_formats(self) -> List[PromptFormat]:
+        """Get the list of available prompt formats.
+        
+        Returns:
+            The list of available prompt formats.
+        """
+        return self._prompt_formats
 
     async def connect(self) -> bool:
         """Connect to the MCP server.
@@ -237,6 +318,8 @@ class MCPServer:
                 self._tools = []
                 self._resources = []
                 self._resource_templates = []
+                self._prompts = []
+                self._prompt_formats = []
                 self._server_info = None
                 logging.info(f"Disconnected from MCP server {self.name}")
             except Exception as e:
@@ -265,14 +348,17 @@ class MCPServer:
             
             if hasattr(resources_response, "resources"):
                 for resource in resources_response.resources:
-                    self._resources.append(
-                        Resource(
-                            resource.uri, 
-                            resource.name, 
-                            getattr(resource, "mimeType", None),
-                            getattr(resource, "description", None)
+                    try:
+                        self._resources.append(
+                            Resource(
+                                getattr(resource, "uri", ""), 
+                                getattr(resource, "name", "Unknown"),
+                                getattr(resource, "mimeType", None),
+                                getattr(resource, "description", None)
+                            )
                         )
-                    )
+                    except Exception as res_err:
+                        logging.warning(f"Error adding resource: {res_err}. Skipping.")
         except Exception as e:
             logging.error(f"Error loading resources from {self.name}: {e}")
         
@@ -283,16 +369,61 @@ class MCPServer:
             
             if hasattr(templates_response, "resourceTemplates"):
                 for template in templates_response.resourceTemplates:
-                    self._resource_templates.append(
-                        ResourceTemplate(
-                            template.uriTemplate, 
-                            template.name, 
-                            getattr(template, "mimeType", None),
-                            getattr(template, "description", None)
+                    try:
+                        self._resource_templates.append(
+                            ResourceTemplate(
+                                getattr(template, "uriTemplate", ""), 
+                                getattr(template, "name", "Unknown"),
+                                getattr(template, "mimeType", None),
+                                getattr(template, "description", None)
+                            )
                         )
-                    )
+                    except Exception as template_err:
+                        logging.warning(f"Error adding resource template: {template_err}. Skipping.")
         except Exception as e:
             logging.error(f"Error loading resource templates from {self.name}: {e}")
+            
+        # Load prompts if supported
+        self._prompts = []
+        if hasattr(self.session, "list_prompts"):
+            try:
+                prompts_response = await self.session.list_prompts()
+                
+                if hasattr(prompts_response, "prompts"):
+                    for prompt in prompts_response.prompts:
+                        # Check if all required attributes exist
+                        if hasattr(prompt, "name") and hasattr(prompt, "description"):
+                            # Use getattr with a default empty dict for inputSchema
+                            input_schema = getattr(prompt, "inputSchema", {})
+                            self._prompts.append(
+                                Prompt(
+                                    prompt.name,
+                                    prompt.description,
+                                    input_schema
+                                )
+                            )
+            except Exception as e:
+                logging.error(f"Error loading prompts from {self.name}: {e}")
+            
+        # Load prompt formats if supported
+        self._prompt_formats = []
+        if hasattr(self.session, "list_prompt_formats"):
+            try:
+                formats_response = await self.session.list_prompt_formats()
+                
+                if hasattr(formats_response, "promptFormats"):
+                    for format in formats_response.promptFormats:
+                        # Check if the required name attribute exists
+                        if hasattr(format, "name"):
+                            self._prompt_formats.append(
+                                PromptFormat(
+                                    format.name,
+                                    getattr(format, "description", None),
+                                    getattr(format, "schema", None)
+                                )
+                            )
+            except Exception as e:
+                logging.error(f"Error loading prompt formats from {self.name}: {e}")
 
     async def execute_tool(
         self,
@@ -354,11 +485,16 @@ class MCPServer:
         if not self.is_connected or not self.session:
             raise RuntimeError(f"Server {self.name} not connected")
         
+        # Ensure uri is a string
+        uri_str = str(uri) if uri is not None else ""
+        if not uri_str:
+            raise ValueError("Resource URI cannot be empty")
+            
         try:
-            result = await self.session.read_resource(uri)
+            result = await self.session.read_resource(uri_str)
             return result
         except Exception as e:
-            logging.error(f"Error reading resource {uri} from {self.name}: {e}")
+            logging.error(f"Error reading resource {uri_str} from {self.name}: {e}")
             raise
 
     async def has_tool(self, tool_name: str) -> bool:
@@ -384,4 +520,29 @@ class MCPServer:
         for tool in self._tools:
             if tool.name == tool_name:
                 return tool
+        return None
+        
+    async def has_prompt(self, prompt_name: str) -> bool:
+        """Check if the server has a prompt with the given name.
+        
+        Args:
+            prompt_name: The name of the prompt to check.
+            
+        Returns:
+            True if the server has the prompt, False otherwise.
+        """
+        return any(prompt.name == prompt_name for prompt in self._prompts)
+    
+    def get_prompt(self, prompt_name: str) -> Optional[Prompt]:
+        """Get a prompt by name.
+        
+        Args:
+            prompt_name: The name of the prompt to get.
+            
+        Returns:
+            The prompt if found, None otherwise.
+        """
+        for prompt in self._prompts:
+            if prompt.name == prompt_name:
+                return prompt
         return None

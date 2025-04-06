@@ -97,12 +97,72 @@ python -m simple_mcp_client.main
 - `servers`: List available MCP servers
 - `tools [server_name]`: List available tools, optionally from a specific server
 - `resources [server_name]`: List available resources, optionally from a specific server
+- `prompts [server_name]`: List available prompts, optionally from a specific server
+- `formats [server_name]`: List available prompt formats, optionally from a specific server
 - `execute <server_name> <tool_name> [arg1=val1 ...]`: Execute a specific tool with arguments
 - `chat`: Start a chat session with the configured LLM and active MCP tools
 - `config show`: Show current configuration
 - `config llm <provider> [model=<model>] [api_url=<url>] [api_key=<key>] [param=value ...]`: Configure LLM provider
 - `reload`: Reload configuration from file
 - `exit`: Exit the program
+
+## Command Examples
+
+### Resources Command
+
+The `resources` command lists available resources and resource templates from connected MCP servers.
+
+List all resources from all connected servers:
+```bash
+resources
+```
+
+List resources from a specific server:
+```bash
+resources k8s
+```
+
+Output example:
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     All Available Resources - Direct Resources     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ URI                  │ Name                │ MIME Type         │
+│ k8s://pods/default  │ Default namespace pods │ application/json │
+└────────────────────┴─────────────────────┴──────────────────┘
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃     All Available Resources - Resource Templates     ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ URI Template       │ Name                  │ MIME Type         │
+│ k8s://pods/{namespace} │ Pods in namespace    │ application/json │
+└────────────────────┴───────────────────────┴──────────────────┘
+```
+
+### Prompts Command
+
+The `prompts` command lists available prompts from connected MCP servers.
+
+List all prompts from all connected servers:
+```bash
+prompts
+```
+
+List prompts from a specific server:
+```bash
+prompts k8s
+```
+
+Output example:
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                All Available Prompts                 ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Name               │ Description                     │
+│ k8s-describe       │ Describe Kubernetes resources   │
+│ k8s-troubleshoot   │ Troubleshoot Kubernetes issues  │
+└────────────────────┴─────────────────────────────────┘
+```
 
 ## Environment Variables
 
