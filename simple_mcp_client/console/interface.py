@@ -89,18 +89,31 @@ class ConsoleInterface:
         Returns:
             A string representation of the object.
         """
+        # Custom JSON encoder to handle datetime objects
+        class DateTimeEncoder(json.JSONEncoder):
+            def default(self, obj):
+                # Handle datetime objects by converting to ISO format string
+                import datetime
+                if isinstance(obj, (datetime.datetime, datetime.date, datetime.time)):
+                    return obj.isoformat()
+                # Handle sets by converting to lists
+                if isinstance(obj, set):
+                    return list(obj)
+                # Let the base class handle anything else
+                return super().default(obj)
+        
         try:
-            # Try direct JSON serialization
-            return json.dumps(obj, indent=2)
+            # Try direct JSON serialization with our custom encoder
+            return json.dumps(obj, indent=2, cls=DateTimeEncoder)
         except TypeError:
             # Handle objects with __dict__
             if hasattr(obj, "__dict__"):
                 try:
                     obj_dict = {k: v for k, v in obj.__dict__.items() 
                                if not k.startswith('_') and not callable(v)}
-                    return json.dumps(obj_dict, indent=2)
-                except:
-                    pass
+                    return json.dumps(obj_dict, indent=2, cls=DateTimeEncoder)
+                except Exception as e:
+                    logging.warning(f"Failed to serialize object dict: {e}")
             
             # Handle objects with special content structure (like CallToolResult)
             if hasattr(obj, "content") and isinstance(obj.content, list):
@@ -110,15 +123,15 @@ class ConsoleInterface:
                         content_text += item.text + "\n"
                     elif hasattr(item, "__dict__"):
                         try:
-                            content_text += json.dumps(item.__dict__, indent=2) + "\n"
-                        except:
+                            content_text += json.dumps(item.__dict__, indent=2, cls=DateTimeEncoder) + "\n"
+                        except Exception:
                             content_text += f"[Object of type {type(item).__name__}]\n"
                     else:
                         content_text += str(item) + "\n"
                 return content_text
             
-            # Last resort - string representation
-            return str(obj)
+            # If we still have issues, convert to string and mention the type
+            return f"[{type(obj).__name__}]: {str(obj)}"
 
     def __init__(self, config: Configuration, server_manager: ServerManager) -> None:
         """Initialize the console interface.
@@ -175,6 +188,14 @@ class ConsoleInterface:
             "execute": {
                 "description": "Execute a tool",
                 "handler": self._cmd_execute,
+            },
+            "get-resource": {
+                "description": "Get a resource from an MCP server",
+                "handler": self._cmd_get_resource,
+            },
+            "get-prompt": {
+                "description": "Get a prompt from an MCP server",
+                "handler": self._cmd_get_prompt,
             },
             "chat": {
                 "description": "Start a chat session with LLM and MCP tools",
@@ -1009,6 +1030,193 @@ class ConsoleInterface:
             
         except Exception as e:
             self.console.print(f"[red]Error reloading configuration: {str(e)}[/red]")
+    
+    async def _cmd_get_resource(self, args: str) -> None:
+        """Handle the get-resource command.
+        
+        Args:
+            args: Command arguments.
+            
+        Format: get-resource [server_name] <resource_uri>
+        """
+        args = args.strip()
+        parts = args.split()
+        
+        if not args:
+            self.console.print("[red]Error: Missing resource URI.[/red]")
+            self.console.print("Usage: get-resource [server_name] <resource_uri>")
+            return
+        
+        server_name = None
+        resource_uri = None
+        
+        if len(parts) == 1:
+            # Only URI provided, try to find a server that has the resource
+            resource_uri = parts[0]
+        elif len(parts) >= 2:
+            # Server name and URI provided
+            server_name = parts[0]
+            resource_uri = parts[1]
+        
+        try:
+            # Use a status indicator
+            status_context = self.console.status(f"[bold green]Getting resource {resource_uri}...[/bold green]")
+            status_context.__enter__()
+            
+            try:
+                result = await self.server_manager.get_resource(resource_uri, server_name)
+                status_context.__exit__(None, None, None)
+                
+                # Determine how to display the resource
+                if hasattr(result, "contents") and isinstance(result.contents, list):
+                    # Handle ReadResourceResponse with multiple contents
+                    for content in result.contents:
+                        mime_type = getattr(content, "mimeType", None)
+                        text = getattr(content, "text", None)
+                        
+                        if text:
+                            # Try to format as JSON if it looks like JSON
+                            if text.strip().startswith(("{", "[")):
+                                try:
+                                    parsed = json.loads(text)
+                                    formatted = json.dumps(parsed, indent=2)
+                                    self.console.print(Panel(formatted, 
+                                        title=f"Resource: {resource_uri} ({mime_type})", 
+                                        border_style="green"))
+                                except json.JSONDecodeError:
+                                    # Not valid JSON, display as-is
+                                    self.console.print(Panel(text, 
+                                        title=f"Resource: {resource_uri} ({mime_type})", 
+                                        border_style="green"))
+                            else:
+                                # Plain text
+                                self.console.print(Panel(text, 
+                                    title=f"Resource: {resource_uri} ({mime_type})", 
+                                    border_style="green"))
+                        else:
+                            # No text content, show object summary
+                            formatted = self._serialize_complex_object(content)
+                            self.console.print(Panel(formatted, 
+                                title=f"Resource: {resource_uri}", 
+                                border_style="green"))
+                else:
+                    # Handle string or other result types
+                    formatted_result = self._serialize_complex_object(result)
+                    self.console.print(Panel(formatted_result, 
+                        title=f"Resource: {resource_uri}", 
+                        border_style="green"))
+                    
+            except Exception as e:
+                # Make sure status is cleared even on error
+                status_context.__exit__(None, None, None)
+                self.console.print(f"[red]Error getting resource: {str(e)}[/red]")
+        except Exception as outer_e:
+            # Handle any issues with the status context itself
+            self.console.print(f"[red]Error setting up command environment: {str(outer_e)}[/red]")
+    
+    async def _cmd_get_prompt(self, args: str) -> None:
+        """Handle the get-prompt command.
+        
+        Args:
+            args: Command arguments.
+            
+        Format: get-prompt [server_name] <prompt_name> [format=<format_name>] [arg1=val1 arg2=val2 ...]
+        """
+        args = args.strip()
+        parts = args.split()
+        
+        if len(parts) < 1:
+            self.console.print("[red]Error: Missing prompt name.[/red]")
+            self.console.print("Usage: get-prompt [server_name] <prompt_name> [format=<format_name>] [arg1=val1 arg2=val2 ...]")
+            return
+        
+        server_name = None
+        prompt_name = None
+        format_name = None
+        prompt_args = {}
+        
+        if len(parts) == 1:
+            # Only prompt name provided
+            prompt_name = parts[0]
+        else:
+            # Check if first two args are server and prompt, or prompt and args
+            if "=" in parts[1]:
+                # First arg is prompt name, rest are arguments
+                prompt_name = parts[0]
+                arg_parts = parts[1:]
+            else:
+                # First arg is server name, second is prompt name
+                server_name = parts[0]
+                prompt_name = parts[1]
+                arg_parts = parts[2:]
+            
+            # Parse arguments
+            for arg in arg_parts:
+                if "=" not in arg:
+                    self.console.print(f"[red]Error: Invalid argument format: {arg}. "
+                                     "Use: key=value[/red]")
+                    return
+                
+                key, value = arg.split("=", 1)
+                
+                # Handle format separately
+                if key.lower() == "format":
+                    format_name = value
+                    continue
+                
+                # Try to parse JSON-like values
+                if value.lower() == "true":
+                    value = True
+                elif value.lower() == "false":
+                    value = False
+                elif value.isdigit():
+                    value = int(value)
+                elif re.match(r"^-?\d+\.\d+$", value):
+                    value = float(value)
+                
+                prompt_args[key] = value
+        
+        try:
+            # Use a status indicator
+            status_text = f"[bold green]Getting prompt {prompt_name}"
+            if server_name:
+                status_text += f" from {server_name}"
+            status_text += "...[/bold green]"
+            
+            status_context = self.console.status(status_text)
+            status_context.__enter__()
+            
+            try:
+                result = await self.server_manager.get_prompt(
+                    prompt_name, prompt_args, format_name, server_name
+                )
+                status_context.__exit__(None, None, None)
+                
+                # Determine how to display the prompt
+                if hasattr(result, "text"):
+                    # Handle text content directly
+                    title = f"Prompt: {prompt_name}"
+                    if format_name:
+                        title += f" (Format: {format_name})"
+                    
+                    self.console.print(Panel(result.text, title=title, border_style="green"))
+                else:
+                    # Handle string or other result types
+                    formatted_result = self._serialize_complex_object(result)
+                    
+                    title = f"Prompt: {prompt_name}"
+                    if format_name:
+                        title += f" (Format: {format_name})"
+                    
+                    self.console.print(Panel(formatted_result, title=title, border_style="green"))
+                    
+            except Exception as e:
+                # Make sure status is cleared even on error
+                status_context.__exit__(None, None, None)
+                self.console.print(f"[red]Error getting prompt: {str(e)}[/red]")
+        except Exception as outer_e:
+            # Handle any issues with the status context itself
+            self.console.print(f"[red]Error setting up command environment: {str(outer_e)}[/red]")
     
     async def _cmd_exit(self, args: str) -> None:
         """Handle the exit command.

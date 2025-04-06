@@ -211,3 +211,71 @@ class ServerManager:
             raise RuntimeError(f"No connected server found with tool {tool_name}")
         
         return await server.execute_tool(tool_name, arguments)
+    
+    async def get_resource(self, uri: str, server_name: Optional[str] = None) -> Any:
+        """Get a resource from a server.
+        
+        Args:
+            uri: The URI of the resource to get.
+            server_name: The name of the server to get the resource from.
+                        If not provided, will try to find a server that has the resource.
+            
+        Returns:
+            The resource content.
+            
+        Raises:
+            RuntimeError: If no server with the resource is found or connected.
+        """
+        if server_name:
+            server = self.get_server(server_name)
+            if not server:
+                raise RuntimeError(f"Server {server_name} not found")
+            if not server.is_connected:
+                raise RuntimeError(f"Server {server_name} is not connected")
+            
+            return await server.read_resource(uri)
+        
+        # Try to find a server with the resource in all connected servers
+        for server in self.get_connected_servers():
+            try:
+                return await server.read_resource(uri)
+            except Exception:
+                continue
+        
+        raise RuntimeError(f"No connected server found that can provide resource {uri}")
+    
+    async def get_prompt(self, prompt_name: str, arguments: Dict[str, Any],
+                        format_name: Optional[str] = None,
+                        server_name: Optional[str] = None) -> Any:
+        """Get a prompt from a server.
+        
+        Args:
+            prompt_name: The name of the prompt to get.
+            arguments: The arguments to pass to the prompt.
+            format_name: Optional name of the format to use.
+            server_name: The name of the server to get the prompt from.
+                        If not provided, will try to find a server with the prompt.
+            
+        Returns:
+            The prompt content.
+            
+        Raises:
+            RuntimeError: If no server with the prompt is found or connected.
+        """
+        if server_name:
+            server = self.get_server(server_name)
+            if not server:
+                raise RuntimeError(f"Server {server_name} not found")
+            if not server.is_connected:
+                raise RuntimeError(f"Server {server_name} is not connected")
+            if not await server.has_prompt(prompt_name):
+                raise RuntimeError(f"Server {server_name} does not have prompt {prompt_name}")
+            
+            return await server.get_prompt_content(prompt_name, arguments, format_name)
+        
+        # Try to find a server with the prompt
+        server = self.get_server_with_prompt(prompt_name)
+        if not server:
+            raise RuntimeError(f"No connected server found with prompt {prompt_name}")
+        
+        return await server.get_prompt_content(prompt_name, arguments, format_name)

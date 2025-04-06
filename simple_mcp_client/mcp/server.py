@@ -546,3 +546,62 @@ class MCPServer:
             if prompt.name == prompt_name:
                 return prompt
         return None
+    
+    async def get_prompt_content(
+        self,
+        prompt_name: str,
+        arguments: Dict[str, Any],
+        format_name: Optional[str] = None,
+        retries: int = 2,
+        delay: float = 1.0,
+    ) -> Any:
+        """Get prompt content from the server.
+        
+        Args:
+            prompt_name: The name of the prompt to get.
+            arguments: The arguments to pass to the prompt.
+            format_name: Optional name of the format to use.
+            retries: The number of retries.
+            delay: The delay between retries.
+            
+        Returns:
+            The prompt content.
+            
+        Raises:
+            RuntimeError: If the server is not connected.
+            Exception: If the prompt retrieval fails.
+        """
+        if not self.is_connected or not self.session:
+            raise RuntimeError(f"Server {self.name} not connected")
+        
+        if not await self.has_prompt(prompt_name):
+            raise ValueError(f"Prompt {prompt_name} not found on server {self.name}")
+        
+        attempt = 0
+        while attempt < retries:
+            try:
+                logging.info(f"Getting prompt {prompt_name} from {self.name}...")
+                
+                # Check if session has get_prompt method
+                if not hasattr(self.session, "get_prompt"):
+                    raise RuntimeError(f"Server {self.name} does not support getting prompts")
+                
+                # Call get_prompt with arguments and optional format
+                if format_name:
+                    result = await self.session.get_prompt(prompt_name, arguments, format_name)
+                else:
+                    result = await self.session.get_prompt(prompt_name, arguments)
+                
+                return result
+                
+            except Exception as e:
+                attempt += 1
+                logging.warning(
+                    f"Error getting prompt: {e}. Attempt {attempt} of {retries}."
+                )
+                if attempt < retries:
+                    logging.info(f"Retrying in {delay} seconds...")
+                    await asyncio.sleep(delay)
+                else:
+                    logging.error("Max retries reached. Failing.")
+                    raise
