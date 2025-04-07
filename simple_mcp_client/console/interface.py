@@ -395,21 +395,39 @@ class ConsoleInterface:
             
             tools = server.tools
             title = f"Tools from {server_name}"
+            
+            if not tools:
+                self.console.print("[yellow]No tools available[/yellow]")
+                return
+            
+            # For single server, don't show server column
+            table = Table(title=title)
+            table.add_column("Name", style="cyan")
+            table.add_column("Description", style="green")
+            
+            for tool in sorted(tools, key=lambda t: t.name):
+                table.add_row(tool.name, tool.description)
         else:
-            # List all tools from all servers
-            tools = self.server_manager.get_all_tools()
+            # List all tools from all servers with server tracking
+            tools_with_server = []
+            for server in self.server_manager.get_connected_servers():
+                for tool in server.tools:
+                    tools_with_server.append((tool, server.name))
+            
             title = "All Available Tools"
-        
-        if not tools:
-            self.console.print("[yellow]No tools available[/yellow]")
-            return
-        
-        table = Table(title=title)
-        table.add_column("Name", style="cyan")
-        table.add_column("Description", style="green")
-        
-        for tool in sorted(tools, key=lambda t: t.name):
-            table.add_row(tool.name, tool.description)
+            
+            if not tools_with_server:
+                self.console.print("[yellow]No tools available[/yellow]")
+                return
+            
+            # For all servers, include server column
+            table = Table(title=title)
+            table.add_column("Name", style="cyan")
+            table.add_column("Description", style="green")
+            table.add_column("Server", style="blue")
+            
+            for tool, server_name in sorted(tools_with_server, key=lambda t: t[0].name):
+                table.add_row(tool.name, tool.description, server_name)
         
         self.console.print(table)
     
@@ -437,20 +455,31 @@ class ConsoleInterface:
             resources = server.resources
             templates = server.resource_templates
             title = f"Resources from {server_name}"
+            show_server_column = False
         else:
-            # List all resources from all servers
-            resources = []
-            templates = []
+            # List all resources from all servers with server tracking
+            resources_with_server = []
+            templates_with_server = []
             for server in self.server_manager.get_connected_servers():
-                resources.extend(server.resources)
-                templates.extend(server.resource_templates)
+                for resource in server.resources:
+                    resources_with_server.append((resource, server.name))
+                for template in server.resource_templates:
+                    templates_with_server.append((template, server.name))
+            
+            # Check if there are any resources or templates available
+            if not resources_with_server and not templates_with_server:
+                self.console.print("[yellow]No resources available[/yellow]")
+                return
+            
             title = "All Available Resources"
+            show_server_column = True
         
-        if not resources and not templates:
+        if args and not resources and not templates:
             self.console.print("[yellow]No resources available[/yellow]")
             return
         
-        if resources:
+        if args and resources:
+            # Single server resources
             table = Table(title=f"{title} - Direct Resources")
             table.add_column("URI", style="cyan")
             table.add_column("Name", style="green")
@@ -477,8 +506,39 @@ class ConsoleInterface:
                 self.console.print(f"[red]Error displaying resources table: {table_err}[/red]")
             
             self.console.print(table)
+        elif not args and resources_with_server:
+            # All servers resources
+            table = Table(title=f"{title} - Direct Resources")
+            table.add_column("URI", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("MIME Type", style="blue")
+            table.add_column("Server", style="yellow")
+            
+            try:
+                # Sort resources safely, with a fallback for any sorting errors
+                try:
+                    sorted_resources = sorted(resources_with_server, key=lambda r: r[0].uri)
+                except Exception:
+                    self.console.print("[yellow]Warning: Unable to sort resources. Displaying in original order.[/yellow]")
+                    sorted_resources = resources_with_server
+                
+                for resource, server_name in sorted_resources:
+                    try:
+                        table.add_row(
+                            resource.uri,
+                            resource.name,
+                            resource.mime_type or "[italic]Not specified[/italic]",
+                            server_name
+                        )
+                    except Exception as row_err:
+                        self.console.print(f"[yellow]Warning: Unable to display resource: {row_err}[/yellow]")
+            except Exception as table_err:
+                self.console.print(f"[red]Error displaying resources table: {table_err}[/red]")
+            
+            self.console.print(table)
         
-        if templates:
+        if args and templates:
+            # Single server templates
             table = Table(title=f"{title} - Resource Templates")
             table.add_column("URI Template", style="cyan")
             table.add_column("Name", style="green")
@@ -498,6 +558,36 @@ class ConsoleInterface:
                             template.uri_template,
                             template.name,
                             template.mime_type or "[italic]Not specified[/italic]"
+                        )
+                    except Exception as row_err:
+                        self.console.print(f"[yellow]Warning: Unable to display resource template: {row_err}[/yellow]")
+            except Exception as table_err:
+                self.console.print(f"[red]Error displaying template table: {table_err}[/red]")
+            
+            self.console.print(table)
+        elif not args and templates_with_server:
+            # All servers templates
+            table = Table(title=f"{title} - Resource Templates")
+            table.add_column("URI Template", style="cyan")
+            table.add_column("Name", style="green")
+            table.add_column("MIME Type", style="blue")
+            table.add_column("Server", style="yellow")
+            
+            try:
+                # Sort templates safely, with a fallback for any sorting errors
+                try:
+                    sorted_templates = sorted(templates_with_server, key=lambda t: t[0].uri_template)
+                except Exception:
+                    self.console.print("[yellow]Warning: Unable to sort templates. Displaying in original order.[/yellow]")
+                    sorted_templates = templates_with_server
+                
+                for template, server_name in sorted_templates:
+                    try:
+                        table.add_row(
+                            template.uri_template,
+                            template.name,
+                            template.mime_type or "[italic]Not specified[/italic]",
+                            server_name
                         )
                     except Exception as row_err:
                         self.console.print(f"[yellow]Warning: Unable to display resource template: {row_err}[/yellow]")
@@ -529,21 +619,39 @@ class ConsoleInterface:
             
             prompts = server.prompts
             title = f"Prompts from {server_name}"
+            
+            if not prompts:
+                self.console.print("[yellow]No prompts available[/yellow]")
+                return
+            
+            # For single server, don't show server column
+            table = Table(title=title)
+            table.add_column("Name", style="cyan")
+            table.add_column("Description", style="green")
+            
+            for prompt in sorted(prompts, key=lambda p: p.name):
+                table.add_row(prompt.name, prompt.description)
         else:
-            # List all prompts from all servers
-            prompts = self.server_manager.get_all_prompts()
+            # List all prompts from all servers with server tracking
+            prompts_with_server = []
+            for server in self.server_manager.get_connected_servers():
+                for prompt in server.prompts:
+                    prompts_with_server.append((prompt, server.name))
+            
             title = "All Available Prompts"
-        
-        if not prompts:
-            self.console.print("[yellow]No prompts available[/yellow]")
-            return
-        
-        table = Table(title=title)
-        table.add_column("Name", style="cyan")
-        table.add_column("Description", style="green")
-        
-        for prompt in sorted(prompts, key=lambda p: p.name):
-            table.add_row(prompt.name, prompt.description)
+            
+            if not prompts_with_server:
+                self.console.print("[yellow]No prompts available[/yellow]")
+                return
+            
+            # For all servers, include server column
+            table = Table(title=title)
+            table.add_column("Name", style="cyan")
+            table.add_column("Description", style="green")
+            table.add_column("Server", style="blue")
+            
+            for prompt, server_name in sorted(prompts_with_server, key=lambda p: p[0].name):
+                table.add_row(prompt.name, prompt.description, server_name)
         
         self.console.print(table)
     
@@ -570,24 +678,46 @@ class ConsoleInterface:
             
             formats = server.prompt_formats
             title = f"Prompt Formats from {server_name}"
+            
+            if not formats:
+                self.console.print("[yellow]No prompt formats available[/yellow]")
+                return
+            
+            # For single server, don't show server column
+            table = Table(title=title)
+            table.add_column("Name", style="cyan")
+            table.add_column("Description", style="green")
+            
+            for format in sorted(formats, key=lambda f: f.name):
+                table.add_row(
+                    format.name,
+                    format.description or "[italic]No description[/italic]"
+                )
         else:
-            # List all prompt formats from all servers
-            formats = self.server_manager.get_all_prompt_formats()
+            # List all prompt formats from all servers with server tracking
+            formats_with_server = []
+            for server in self.server_manager.get_connected_servers():
+                for format in server.prompt_formats:
+                    formats_with_server.append((format, server.name))
+            
             title = "All Available Prompt Formats"
-        
-        if not formats:
-            self.console.print("[yellow]No prompt formats available[/yellow]")
-            return
-        
-        table = Table(title=title)
-        table.add_column("Name", style="cyan")
-        table.add_column("Description", style="green")
-        
-        for format in sorted(formats, key=lambda f: f.name):
-            table.add_row(
-                format.name,
-                format.description or "[italic]No description[/italic]"
-            )
+            
+            if not formats_with_server:
+                self.console.print("[yellow]No prompt formats available[/yellow]")
+                return
+            
+            # For all servers, include server column
+            table = Table(title=title)
+            table.add_column("Name", style="cyan")
+            table.add_column("Description", style="green")
+            table.add_column("Server", style="blue")
+            
+            for format, server_name in sorted(formats_with_server, key=lambda f: f[0].name):
+                table.add_row(
+                    format.name,
+                    format.description or "[italic]No description[/italic]",
+                    server_name
+                )
         
         self.console.print(table)
     
