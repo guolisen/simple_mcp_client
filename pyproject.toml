@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Simple MCP Client Team", email = "example@example.com"}
+    {name = "Lewis Guo", email = "guolisen@gmail.com"}
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -27,14 +27,21 @@ dependencies = [
     "click>=8.0.0",
     "rich>=10.0.0",
     "python-dotenv>=0.19.0",
+    "setuptools>=78.1.0",
+    "wheel>=0.45.1",
+    "twine>=6.1.0",
+    "pkginfo>=1.12.1.2",
+    "urllib3>=2.3.0",
+    "requests-toolbelt>=1.0.0",
+    "build>=1.2.2.post1",
 ]
 
 [project.scripts]
 simple-mcp-client = "simple_mcp_client.main:main"
 
 [project.urls]
-"Homepage" = "https://github.com/example/simple-mcp-client"
-"Bug Tracker" = "https://github.com/example/simple-mcp-client/issues"
+"Homepage" = "https://github.com/guolisen/simple-mcp-client"
+"Bug Tracker" = "https://github.com/guolisen/simple-mcp-client/issues"
 
 [tool.setuptools]
 packages = ["simple_mcp_client"]

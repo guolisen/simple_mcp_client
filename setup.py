@@ -11,9 +11,9 @@ setup(
     description="A simple MCP client for testing MCP servers",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    author="Simple MCP Client Team",
-    author_email="example@example.com",
-    url="https://github.com/example/simple-mcp-client",
+    author="Lewis Guo",
+    author_email="guolisen@gmail.com",
+    url="https://github.com/guolisen/simple-mcp-client",
     packages=find_packages(),
     include_package_data=True,
     package_data={
