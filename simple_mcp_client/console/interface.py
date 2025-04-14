@@ -20,6 +20,7 @@ from rich.markdown import Markdown
 from ..config import Configuration
 from ..llm import LLMProvider, LLMProviderFactory
 from ..mcp import ServerManager, Tool
+from ..prompt.system import generate_system_prompt, generate_tool_format
 
 
 class CommandCompleter(Completer):
@@ -46,7 +47,7 @@ class CommandCompleter(Completer):
             yield from self.command_completer.get_completions(document, complete_event)
             return
         
-        # Command with space, try to complete subcommands or arguments
+        # Command with space, try to complete subcommands or parameters
         cmd, args = text.split(" ", 1)
         cmd = cmd.lower()
         
@@ -270,7 +271,7 @@ class ConsoleInterface:
         """Handle the help command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         table = Table(title="Available Commands")
         table.add_column("Command", style="cyan")
@@ -285,7 +286,7 @@ class ConsoleInterface:
         """Handle the connect command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         args = args.strip()
         if not args:
@@ -325,7 +326,7 @@ class ConsoleInterface:
         """Handle the disconnect command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         args = args.strip()
         if not args:
@@ -351,7 +352,7 @@ class ConsoleInterface:
         """Handle the servers command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         table = Table(title="MCP Servers")
         table.add_column("Name", style="cyan")
@@ -376,7 +377,7 @@ class ConsoleInterface:
         """Handle the tools command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         args = args.strip()
         
@@ -435,7 +436,7 @@ class ConsoleInterface:
         """Handle the resources command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         args = args.strip()
         
@@ -600,7 +601,7 @@ class ConsoleInterface:
         """Handle the prompts command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         args = args.strip()
         
@@ -659,7 +660,7 @@ class ConsoleInterface:
         """Handle the formats command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         args = args.strip()
         
@@ -725,7 +726,7 @@ class ConsoleInterface:
         """Handle the execute command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
             
         Format: execute <server_name> <tool_name> [arg1=val1 arg2=val2 ...]
         """
@@ -740,7 +741,7 @@ class ConsoleInterface:
         server_name = parts[0]
         tool_name = parts[1]
         
-        # Parse arguments
+        # Parse parameters
         tool_args = {}
         for arg in parts[2:]:
             if "=" not in arg:
@@ -803,7 +804,7 @@ class ConsoleInterface:
         """Handle the chat command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         if not self.llm_provider:
             self.console.print("[red]Error: No LLM provider configured[/red]")
@@ -818,31 +819,21 @@ class ConsoleInterface:
         all_tools = self.server_manager.get_all_tools()
         tools_description = "\n".join([tool.format_for_llm() for tool in all_tools])
         
-        system_message = (
-            "You are a helpful assistant with access to these tools:\n\n"
-            f"{tools_description}\n"
-            "Choose the appropriate tool based on the user's question. "
-            "If no tool is needed, reply directly.\n\n"
-            "IMPORTANT: When you need to use a tool, you must ONLY respond with "
-            "the exact JSON object format below, nothing else:\n"
-            "{\n"
-            '    "tool": "tool-name",\n'
-            '    "arguments": {\n'
-            '        "argument-name": "value"\n'
-            "    }\n"
-            "}\n\n"
-            "Guidelines for using tools:\n"
-            "1. When a user's question requires real-time data or external information, use an appropriate tool\n"
-            "2. Format your tool call exactly as specified - it will be parsed as JSON\n"
-            "3. If the initial tool result doesn't fully answer the question, you can call another tool\n"
-            "4. After tool results are available, incorporate them into a helpful response\n\n"
-            "If you receive tool results and need to call another tool, respond ONLY with the tool call JSON. "
-            "Otherwise, provide a complete and helpful response that addresses the user's original question "
-            "using the tool result.\n\n"
-            "Please use only the tools that are explicitly defined above."
+        # Format tools for the system prompt
+        # Either use the enhanced formatter or fall back to the basic one
+        try:
+            tools_description = generate_tool_format(all_tools)
+        except Exception as e:
+            self.console.print(f"Warning using enhanced tool formatting, falling back to basic: {str(e)}")
+
+        # Generate the enhanced modular system prompt
+        system_prompt = generate_system_prompt(
+            available_tools=tools_description,
+            include_mcp_guidance=True,
+            include_react_guidance=True
         )
-        
-        self.llm_provider.set_system_message(system_message)
+
+        self.llm_provider.set_system_message(system_prompt)
         
         self.console.print(Panel.fit(
             f"[bold green]Chat mode started with {self.llm_provider.name} ({self.llm_provider.model})[/bold green]\n"
@@ -852,7 +843,7 @@ class ConsoleInterface:
             title="MCP Chat"
         ))
         
-        messages = [{"role": "system", "content": system_message}]
+        messages = [{"role": "system", "content": system_prompt}]
         
         # Chat loop
         while True:
@@ -896,19 +887,14 @@ class ConsoleInterface:
                 is_tool_call = False
                 try:
                     tool_call = json.loads(llm_response)
-                    is_tool_call = (
-                        isinstance(tool_call, dict) and 
-                        "tool" in tool_call and 
-                        "arguments" in tool_call and
-                        isinstance(tool_call["arguments"], dict)
-                    )
+                    is_tool_call = True
                 except json.JSONDecodeError:
                     is_tool_call = False
                 
                 if is_tool_call:
                     self.console.print(Panel(
                         f"[bold]Executing tool:[/bold] {tool_call['tool']}\n"
-                        f"[bold]With arguments:[/bold] {json.dumps(tool_call['arguments'], indent=2)}",
+                        f"[bold]With parameters:[/bold] {json.dumps(tool_call['parameters'], indent=2)}",
                         title="Assistant",
                         border_style="yellow"
                     ))
@@ -918,7 +904,7 @@ class ConsoleInterface:
                         self.console.print(f"[bold green]Executing {tool_call['tool']}...[/bold green]")
                         result = await self.server_manager.execute_tool(
                             tool_call["tool"],
-                            tool_call["arguments"]
+                            tool_call["parameters"]
                         )
                         
                         # Add assistant message to history
@@ -936,7 +922,7 @@ class ConsoleInterface:
                             "A tool has been called based on the user's question, and the result is provided below. "
                             "Create a natural, conversational response that incorporates this tool result. "
                             "If you need to call additional tools to fully answer the question, respond ONLY with a "
-                            "JSON object in the format: {\"tool\": \"tool-name\", \"arguments\": {\"key\": \"value\"}}. "
+                            "JSON object in the format: {\"tool\": \"tool-name\", \"parameters\": {\"key\": \"value\"}}. "
                             "Otherwise, provide a complete and helpful response that addresses the user's original question "
                             "using the tool result.\n\n"
                             f"User's original question: {user_input}\n\n"
@@ -945,28 +931,29 @@ class ConsoleInterface:
                         )
                         
                         # Replace the original system message temporarily for this response
-                        original_system_message = messages[0]["content"]
-                        messages[0]["content"] = new_system_prompt
+                        #original_system_message = messages[0]["content"]
+                        #messages[0]["content"] = new_system_prompt
                         
+                        messages.append({"role": "user", "content": formatted_result})
+
                         # Get final response from LLM
                         self.console.print("[bold green]Processing result...[/bold green]")
                         final_response = await self.llm_provider.get_response(messages)
                         
                         # Check if the final response is another tool call
                         try:
-                            another_tool_call = json.loads(final_response)
-                            is_another_tool_call = (
-                                isinstance(another_tool_call, dict) and 
-                                "tool" in another_tool_call and 
-                                "arguments" in another_tool_call and
-                                isinstance(another_tool_call["arguments"], dict)
-                            )
-                            
-                            if is_another_tool_call:
+                            is_another_call = False
+                            try:
+                                another_tool_call = json.loads(final_response)
+                                is_another_call = True
+                            except json.JSONDecodeError:
+                                is_another_call = False
+
+                            if is_another_call:
                                 # It's another tool call, so we'll display it as such
                                 self.console.print(Panel(
                                     f"[bold]Assistant needs to call another tool:[/bold] {another_tool_call['tool']}\n"
-                                    f"[bold]With arguments:[/bold] {json.dumps(another_tool_call['arguments'], indent=2)}",
+                                    f"[bold]With parameters:[/bold] {json.dumps(another_tool_call['parameters'], indent=2)}",
                                     title="Assistant",
                                     border_style="yellow"
                                 ))
@@ -975,7 +962,7 @@ class ConsoleInterface:
                                 self.console.print(f"[bold green]Executing {another_tool_call['tool']}...[/bold green]")
                                 second_result = await self.server_manager.execute_tool(
                                     another_tool_call["tool"],
-                                    another_tool_call["arguments"]
+                                    another_tool_call["parameters"]
                                 )
                                 
                                 # Format the result
@@ -998,8 +985,10 @@ class ConsoleInterface:
                                 )
                                 
                                 # Update the system message
-                                messages[0]["content"] = combined_system_prompt
+                                #messages[0]["content"] = combined_system_prompt
                                 
+                                messages.append({"role": "user", "content": second_formatted_result})
+
                                 # Get the combined final response
                                 self.console.print("[bold green]Processing combined results...[/bold green]")
                                 combined_final_response = await self.llm_provider.get_response(messages)
@@ -1014,7 +1003,7 @@ class ConsoleInterface:
                                 messages.append({"role": "assistant", "content": combined_final_response})
                                 
                                 # Restore original system message
-                                messages[0]["content"] = original_system_message
+                                #messages[0]["content"] = original_system_message
                                 
                             else:
                                 # Not a tool call, display the response
@@ -1028,7 +1017,7 @@ class ConsoleInterface:
                                 messages.append({"role": "assistant", "content": final_response})
                                 
                                 # Restore original system message
-                                messages[0]["content"] = original_system_message
+                                #messages[0]["content"] = original_system_message
                                 
                         except json.JSONDecodeError:
                             # Not a tool call (not valid JSON), display response directly
@@ -1042,7 +1031,7 @@ class ConsoleInterface:
                             messages.append({"role": "assistant", "content": final_response})
                             
                             # Restore original system message
-                            messages[0]["content"] = original_system_message
+                            #messages[0]["content"] = original_system_message
                         
                     except Exception as e:
                         error_msg = f"Error executing tool: {str(e)}"
@@ -1081,7 +1070,7 @@ class ConsoleInterface:
         """Handle the config command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         args = args.strip()
         parts = args.split()
@@ -1102,7 +1091,7 @@ class ConsoleInterface:
             
             provider = parts[1]
             
-            # Parse arguments
+            # Parse parameters
             kwargs = {}
             for arg in parts[2:]:
                 if "=" not in arg:
@@ -1146,7 +1135,7 @@ class ConsoleInterface:
         """Handle the reload command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         try:
             self.config.reload()
@@ -1165,7 +1154,7 @@ class ConsoleInterface:
         """Handle the get-resource command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
             
         Format: get-resource [server_name] <resource_uri>
         """
@@ -1248,7 +1237,7 @@ class ConsoleInterface:
         """Handle the get-prompt command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
             
         Format: get-prompt [server_name] <prompt_name> [format=<format_name>] [arg1=val1 arg2=val2 ...]
         """
@@ -1271,7 +1260,7 @@ class ConsoleInterface:
         else:
             # Check if first two args are server and prompt, or prompt and args
             if "=" in parts[1]:
-                # First arg is prompt name, rest are arguments
+                # First arg is prompt name, rest are parameters
                 prompt_name = parts[0]
                 arg_parts = parts[1:]
             else:
@@ -1280,7 +1269,7 @@ class ConsoleInterface:
                 prompt_name = parts[1]
                 arg_parts = parts[2:]
             
-            # Parse arguments
+            # Parse parameters
             for arg in arg_parts:
                 if "=" not in arg:
                     self.console.print(f"[red]Error: Invalid argument format: {arg}. "
@@ -1352,7 +1341,7 @@ class ConsoleInterface:
         """Handle the exit command.
         
         Args:
-            args: Command arguments.
+            args: Command parameters.
         """
         self.console.print("[yellow]Disconnecting from all servers...[/yellow]")
         await self.server_manager.disconnect_all()
