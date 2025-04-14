@@ -11,6 +11,10 @@ A simple command-line MCP (Model Context Protocol) client for testing MCP server
 - Chat mode with LLM-driven tool execution
 - Configurable via JSON configuration files
 
+## Example
+
+![example](./docs/images/simple-mcp-client-ex1.png)
+
 ## Installation
 
 There are several ways to install the client:
