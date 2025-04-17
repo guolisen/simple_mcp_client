@@ -16,7 +16,7 @@ A simple command-line MCP (Model Context Protocol) client for testing MCP server
 ### Ex 1:
 ![example](./docs/images/mcp-client-weather.png)
 ### Ex 2:
-![example](./docs/images/mcp-client-k8s.png)
+![example](./docs/images/simple-mcp-client-ex2.png)
 
 ## Installation
 
