@@ -26,13 +26,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+          
       - name: Install uv
         run: |
           pip install uv
+        
       - name: Create virtual env
         run: |
           uv venv
+          
+      - name: enter virtual env
+        run: |
           source .venv/bin/activate
+      
       - name: Install dependencies
         run: |
           uv sync
