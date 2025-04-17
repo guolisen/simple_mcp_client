@@ -15,10 +15,7 @@ on:
 jobs:
   release-build:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: [ "3.12" ]
+    
     permissions:
       # IMPORTANT: this permission is mandatory for trusted publishing
       id-token: write
