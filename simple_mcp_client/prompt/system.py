@@ -111,7 +111,7 @@ the exact JSON object format below, nothing else:\n
 
 {
   "server": "server_name",
-  "tool": "tool_name",
+  "tool": "tool_name",      // Must be the exact tool name from the description
   "parameters": {
     "param1": "value1",
     "param2": "value2"

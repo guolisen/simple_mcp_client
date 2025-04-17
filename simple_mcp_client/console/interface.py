@@ -899,7 +899,7 @@ class ConsoleInterface:
                 if is_tool_call:
                     self.console.print(Panel(
                         f"[bold]Executing tool:[/bold] {tool_call['tool']}\n"
-                        f"[bold]With parameters:[/bold] {json.dumps(tool_call['parameters'], indent=2)}",
+                        + (f"[bold]With parameters:[/bold] {json.dumps(tool_call['parameters'], indent=2)}" if 'parameters' in tool_call else ""),
                         title="Assistant",
                         border_style="yellow"
                     ))

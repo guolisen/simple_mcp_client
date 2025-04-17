@@ -8,9 +8,9 @@ from typing import Dict, Any, Optional
 from prompt_toolkit.formatted_text import HTML
 from rich.console import Console
 
-from .config import Configuration
-from .console import ConsoleInterface
-from .mcp import ServerManager
+from simple_mcp_client.config import Configuration
+from simple_mcp_client.console import ConsoleInterface
+from simple_mcp_client.mcp import ServerManager
 
 
 def setup_logging() -> None:

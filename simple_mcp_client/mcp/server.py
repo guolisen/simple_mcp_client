@@ -7,10 +7,30 @@ from contextlib import AsyncExitStack
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
-from mcp.client.session import ClientSession
-from mcp.client.sse import sse_client
-from mcp.client.stdio import stdio_client
-from mcp.types import Implementation
+try:
+    from mcp.client.session import ClientSession
+    from mcp.client.sse import sse_client
+    from mcp.client.stdio import stdio_client
+    from mcp.types import Implementation
+except ImportError:
+    logging.error("""
+    Error importing MCP modules. This often happens when running in VSCode debug mode.
+    
+    Possible solutions:
+    1. Run the application directly with 'python -m simple_mcp_client.main' instead of using VSCode debug
+    2. Make sure the mcp package is installed in the Python environment VSCode is using
+    3. Install the package in development mode with 'pip install -e .' in the project directory
+    """)
+    # Define placeholder classes to allow the module to load
+    class ClientSession:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def initialize(self): return type('obj', (object,), {'serverInfo': None})
+    
+    class Implementation: pass
+    
+    async def sse_client(url): return (None, None)
+    async def stdio_client(params): return (None, None)
 
 from ..config import ServerConfig
 
