@@ -1,6 +1,6 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 ![](https://badge.mcpx.dev?status=on 'MCP Enabled')
-![](https://badge.mcpx.dev?type=server 'MCP Server')
+![](https://badge.mcpx.dev?type=client 'MCP Client')
 ![](https://badge.mcpx.dev?type=dev 'MCP Dev')
 [![Tests](https://github.com/guolisen/simple_mcp_client/workflows/Tests/badge.svg)](https://github.com/guolisen/simple_mcp_client/actions)
 
