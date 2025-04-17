@@ -9,12 +9,9 @@
 name: Upload Python Package
 
 on:
-  release:
-    types: [published]
-
-permissions:
-  contents: read
-
+  push:
+    tags:
+      - '*'
 jobs:
   release-build:
     runs-on: ubuntu-latest
@@ -22,7 +19,9 @@ jobs:
       fail-fast: false
       matrix:
         python-version: [ "3.12" ]
-  
+    permissions:
+      # IMPORTANT: this permission is mandatory for trusted publishing
+      id-token: write
     steps:
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
