@@ -7,6 +7,8 @@ React loop guidance, and more.
 
 from typing import Dict, List, Optional, Any
 
+from ..mcp.server import Tool
+
 
 def get_introduction() -> str:
     """Get the introduction section of the system prompt."""
@@ -169,7 +171,7 @@ def generate_system_prompt(
 
 
 def generate_tool_format(
-    tools_by_server: Dict[str, List[Dict[str, Any]]],
+    tools_by_server: Dict[str, List[Tool]],
 ) -> str:
     """Generate a formatted description of tools grouped by server.
     
@@ -192,12 +194,12 @@ def generate_tool_format(
         tool_descriptions = []
         
         for tool in tools:
-            name = tool.get("name", "unknown")
-            description = tool.get("description", "No description available")
+            name = tool.name
+            description = tool.description
             
             # Format input schema information if available
             input_params = []
-            input_schema = tool.get("inputSchema", {})
+            input_schema = tool.input_schema
             properties = input_schema.get("properties", {})
             required = input_schema.get("required", [])
             

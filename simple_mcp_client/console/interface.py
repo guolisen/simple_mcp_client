@@ -817,7 +817,6 @@ class ConsoleInterface:
         
         # Create system message with available tools
         all_tools = self.server_manager.get_all_tools()
-        tools_description = "\n".join([tool.format_for_llm() for tool in all_tools])
         
         # Format tools for the system prompt
         # Either use the enhanced formatter or fall back to the basic one
@@ -825,6 +824,12 @@ class ConsoleInterface:
             tools_description = generate_tool_format(all_tools)
         except Exception as e:
             self.console.print(f"Warning using enhanced tool formatting, falling back to basic: {str(e)}")
+            # Fall back to basic formatting
+            tools_description = ""
+            for server_name, tools in all_tools.items():
+                tools_description += f"Server: {server_name}\n\n"
+                for tool in tools:
+                    tools_description += tool.format_for_llm() + "\n"
 
         # Generate the enhanced modular system prompt
         system_prompt = generate_system_prompt(

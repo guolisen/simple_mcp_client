@@ -3,7 +3,7 @@ import logging
 from typing import Dict, List, Optional, Any
 
 from ..config import Configuration, ServerConfig
-from .server import MCPServer, Tool
+from .server import MCPServer, Tool, Resource, ResourceTemplate, Prompt, PromptFormat
 
 
 class ServerManager:
@@ -131,18 +131,18 @@ class ServerManager:
         
         return True
 
-    def get_all_tools(self) -> List[Tool]:
+    def get_all_tools(self) -> Dict[str, List[Tool]]:
         """Get all tools from all connected servers.
         
         Returns:
-            A list of all tools.
+            A dictionary mapping server names to lists of tools.
         """
-        tools = []
+        tools = {}
         for server in self.get_connected_servers():
-            tools.extend(server.tools)
+            tools[server.name] = server.tools
         return tools
     
-    def get_all_prompts(self) -> List['Prompt']:
+    def get_all_prompts(self) -> List[List[Prompt]]:
         """Get all prompts from all connected servers.
         
         Returns:
@@ -153,7 +153,7 @@ class ServerManager:
             prompts.extend(server.prompts)
         return prompts
     
-    def get_all_prompt_formats(self) -> List['PromptFormat']:
+    def get_all_prompt_formats(self) -> List[List[PromptFormat]]:
         """Get all prompt formats from all connected servers.
         
         Returns:
