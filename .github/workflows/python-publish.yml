@@ -76,8 +76,10 @@ jobs:
         with:
           name: release-dists
           path: dist/
-
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+    
       - name: Publish release distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
