@@ -897,6 +897,9 @@ class ConsoleInterface:
                     is_tool_call = False
                 
                 if is_tool_call:
+                    if 'parameters' not in tool_call:
+                        tool_call['parameters'] = {}
+
                     self.console.print(Panel(
                         f"[bold]Executing tool:[/bold] {tool_call['tool']}\n"
                         + (f"[bold]With parameters:[/bold] {json.dumps(tool_call['parameters'], indent=2)}" if 'parameters' in tool_call else ""),
