@@ -42,7 +42,7 @@ jobs:
     
       - name: build
         run: |
-          python -m build
+          ./.venv/bin/python -m build
     
       - name: Upload distributions
         uses: actions/upload-artifact@v4
