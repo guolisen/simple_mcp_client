@@ -114,7 +114,7 @@ class ConsoleInterface:
                                if not k.startswith('_') and not callable(v)}
                     return json.dumps(obj_dict, indent=2, cls=DateTimeEncoder)
                 except Exception as e:
-                    logging.warning(f"Failed to serialize object dict: {e}")
+                    logging.debug(f"Failed to serialize object dict: {e}")
             
             # Handle objects with special content structure (like CallToolResult)
             if hasattr(obj, "content") and isinstance(obj.content, list):
@@ -840,10 +840,16 @@ class ConsoleInterface:
 
         self.llm_provider.set_system_message(system_prompt)
         
+        # count tools
+        tool_count = 0
+        for server_name, tools in all_tools.items():
+            for tool in tools:
+                tool_count += 1
+
         self.console.print(Panel.fit(
             f"[bold green]Chat mode started with {self.llm_provider.name} ({self.llm_provider.model})[/bold green]\n"
             f"Connected servers: {', '.join(s.name for s in connected_servers)}\n"
-            f"Available tools: {len(all_tools)}\n"
+            f"Available tools: {tool_count}\n"
             f"Type [bold]exit[/bold] to return to command mode",
             title="MCP Chat"
         ))
@@ -887,6 +893,56 @@ class ConsoleInterface:
                 self.console.print(f"[red]Error getting LLM response: {str(e)}[/red]")
                 continue
             
+            pattern = r'```json([\s\S]*?)```'
+            match = re.search(pattern, llm_response)
+
+            if match:
+                llm_response = match.group(1).strip()
+                print(llm_response)
+
+            # Translate tool format if needed
+            def translate_tool_format(text):
+                """
+                Translate from simple format to nested JSON if the first line is a tool name.
+
+                FROM:
+                filesystem_list_directory
+                {"path": "/home"}
+
+                TO:
+                {
+                "tool": "filesystem_list_directory",
+                "parameters": {
+                    "path": "/home"
+                }
+                }
+                """
+                lines = text.strip().split('\n', 1)
+                if len(lines) < 2:
+                    return text
+
+                potential_tool_name = lines[0].strip()
+                potential_params = lines[1].strip()
+
+                # Check if first line looks like a tool name (no spaces, no JSON characters)
+                if ' ' in potential_tool_name or '{' in potential_tool_name or '}' in potential_tool_name:
+                    return text
+
+                # Try to parse the second part as JSON
+                try:
+                    params = json.loads(potential_params)
+                    # Create the new format
+                    transformed = {
+                        "tool": potential_tool_name,
+                        "parameters": params
+                    }
+                    return json.dumps(transformed)
+                except json.JSONDecodeError:
+                    return text
+
+            # Apply translation if needed
+            llm_response = translate_tool_format(llm_response)
+
             # Check if response is a tool call
             try:
                 is_tool_call = False
