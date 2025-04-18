@@ -18,7 +18,7 @@ A simple command-line MCP (Model Context Protocol) client for testing MCP server
 - Configurable via JSON configuration files
 
 ## Notice:
-Currently the big model only supports openAI, other models Ollama, deepseek, openrouter are not tested yet. You can sign up for the free WipoAI and use the api key to access the big model.
+Currently the LLM only supports openAI, other models Ollama, deepseek, openrouter are not tested yet. You can sign up for the free ZhiPuAI and use the api key to access the big model.
 ZhiPu: https://www.bigmodel.cn/
 
 ```JSON
