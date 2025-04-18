@@ -47,10 +47,15 @@ There are several ways to install the client:
 
 ### Using UV (recommended)
 
+Install UV
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
 ```bash
 uv venv
 source .venv/bin/activate
-uv pip install -e .
+python -m build
 ```
 
 ### Using pip with requirements.txt
