@@ -401,7 +401,7 @@ class MCPServer:
                     except Exception as res_err:
                         logging.warning(f"Error adding resource: {res_err}. Skipping.")
         except Exception as e:
-            logging.error(f"Error loading resources from {self.name}: {e}")
+            logging.info(f"no resources from {self.name}: {e}")
         
         # Load resource templates
         try:
@@ -422,7 +422,7 @@ class MCPServer:
                     except Exception as template_err:
                         logging.warning(f"Error adding resource template: {template_err}. Skipping.")
         except Exception as e:
-            logging.error(f"Error loading resource templates from {self.name}: {e}")
+            logging.error(f"no resource templates from {self.name}: {e}")
             
         # Load prompts if supported
         self._prompts = []
@@ -444,7 +444,7 @@ class MCPServer:
                                 )
                             )
             except Exception as e:
-                logging.error(f"Error loading prompts from {self.name}: {e}")
+                logging.error(f"no prompts from {self.name}: {e}")
             
         # Load prompt formats if supported
         self._prompt_formats = []
@@ -464,7 +464,7 @@ class MCPServer:
                                 )
                             )
             except Exception as e:
-                logging.error(f"Error loading prompt formats from {self.name}: {e}")
+                logging.error(f"no prompt formats from {self.name}: {e}")
 
     async def execute_tool(
         self,
