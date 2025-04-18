@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name="simple-mcp-client",
-    version="0.1.0",
+    version="0.2.4",
     description="A simple MCP client for testing MCP servers",
     long_description=long_description,
     long_description_content_type="text/markdown",
