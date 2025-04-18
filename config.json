@@ -12,24 +12,33 @@
   "mcpServers": {
     "k8s": {
       "type": "sse",
-      "url": "http://172.19.0.2:31370/sse",
+      "url": "http://10.227.104.51:32085/sse",
       "command": null,
       "args": [],
       "env": {}
     },
     "lcu": {
       "type": "sse",
-      "url": "http://192.168.182.128:8000/sse",
+      "url": "http://127.0.0.1:8012/sse",
       "command": null,
       "args": [],
       "env": {}
     },
     "weather": {
       "type": "sse",
-      "url": "http://127.0.0.1:8011/sse",
+      "url": "http://127.0.0.1:8010/sse",
       "command": null,
       "args": [],
       "env": {}
+    },
+    "tavily": {
+      "type": "stdio",
+      "url": "",
+      "command": "npx",
+      "args": ["-y","tavily-mcp@0.1.4"],
+      "env": {
+        "TAVILY_API_KEY": ""
+      }
     }
   },
   "default_server": "k8s"
