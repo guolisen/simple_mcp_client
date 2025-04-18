@@ -293,16 +293,37 @@ class MCPServer:
                     logging.error(f"Command is required for stdio server {self.name}")
                     return False
                 
+                # Handle special case for npx and validate command
                 command = self.config.command
+                if command == "npx":
+                    command = shutil.which("npx")
+                
+                if command is None:
+                    logging.error(f"Invalid command for stdio server {self.name}: command not found")
+                    return False
+                
                 args = self.config.args
                 env = {**os.environ, **self.config.env} if self.config.env else None
                 
                 logging.info(f"Connecting to stdio server {self.name} with command {command}")
-                stdio_params = (command, args, env)
-                stdio_transport = await self._exit_stack.enter_async_context(
-                    stdio_client(stdio_params)
-                )
-                read, write = stdio_transport
+                
+                try:
+                    # Use StdioServerParameters for better structure
+                    from mcp.client.stdio import StdioServerParameters
+                    server_params = StdioServerParameters(
+                        command=command,
+                        args=args,
+                        env=env
+                    )
+                    
+                    stdio_transport = await self._exit_stack.enter_async_context(
+                        stdio_client(server_params)
+                    )
+                    read, write = stdio_transport
+                except Exception as e:
+                    logging.error(f"Error connecting to stdio server {self.name}: {e}")
+                    await self.disconnect()
+                    return False
             
             else:
                 logging.error(f"Unsupported server type for {self.name}: {self.config.type}")
