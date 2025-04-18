@@ -444,7 +444,7 @@ class MCPServer:
                                 )
                             )
             except Exception as e:
-                logging.error(f"no prompts from {self.name}: {e}")
+                logging.info(f"no prompts from {self.name}: {e}")
             
         # Load prompt formats if supported
         self._prompt_formats = []
