@@ -18,14 +18,29 @@ A simple command-line MCP (Model Context Protocol) client for testing MCP server
 - Configurable via JSON configuration files
 
 ## Notice:
-Currently the LLM only supports openAI, other models Ollama, deepseek, openrouter are not tested yet. You can sign up for the free ZhiPuAI and use the api key to access the big model.
-ZhiPu: https://www.bigmodel.cn/
+This client now supports multiple LLM providers including OpenAI, Ollama, DeepSeek, OpenRouter, and LiteLLM. With the addition of LiteLLM, you can access various models from providers like Anthropic, Google, Azure, and more through a unified interface.
+
+For example, to use Zhipu AI's GLM-4-Flash model:
 
 ```JSON
   "llm": {
     "provider": "openai",
     "model": "GLM-4-Flash",
     "api_url": "https://open.bigmodel.cn/api/paas/v4",
+    "api_key": "",
+    "other_params": {
+      "temperature": 0.7,
+      "max_tokens": 4096
+    }
+  }
+```
+
+Or to use Anthropic's Claude model via LiteLLM:
+
+```JSON
+  "llm": {
+    "provider": "litellm",
+    "model": "anthropic/claude-3-opus-20240229",
     "api_key": "",
     "other_params": {
       "temperature": 0.7,
@@ -246,9 +261,14 @@ get-prompt k8s k8s-describe namespace=default resource=pod name=my-pod
 ## Environment Variables
 
 - `MCP_LOG_LEVEL`: Set logging level (default: INFO)
-- `OPENAI_API_KEY`: OpenAI API key (for OpenAI provider)
+- `OPENAI_API_KEY`: OpenAI API key (for OpenAI provider or LiteLLM with OpenAI models)
 - `DEEPSEEK_API_KEY`: DeepSeek API key (for DeepSeek provider)
 - `OPENROUTER_API_KEY`: OpenRouter API key (for OpenRouter provider)
+- `ANTHROPIC_API_KEY`: Anthropic API key (for LiteLLM with Anthropic models)
+- `GOOGLE_API_KEY`: Google API key (for LiteLLM with Google models)
+- `MISTRAL_API_KEY`: Mistral API key (for LiteLLM with Mistral models)
+- `COHERE_API_KEY`: Cohere API key (for LiteLLM with Cohere models)
+- `AZURE_API_KEY`: Azure API key (for LiteLLM with Azure models)
 
 ## LLM Providers
 
@@ -258,6 +278,7 @@ The client supports the following LLM providers:
 - **OpenAI**: API-based LLM provider for accessing OpenAI's models
 - **DeepSeek**: API-based LLM provider for accessing DeepSeek's models
 - **OpenRouter**: API-based LLM provider that routes requests to multiple LLM backends, providing access to a wide range of models from different providers through a unified API
+- **LiteLLM**: A unified API for various LLM providers (OpenAI, Anthropic, Google, Azure, etc.) with support for fallback models, load balancing, and more
 
 ### Provider-Specific Configuration
 
@@ -273,6 +294,59 @@ OpenRouter supports additional parameters such as:
 
 - `http_referer`: The HTTP referer to use when making requests (default: "https://github.com/simple_mcp_client")
 - `app_name`: The name of the application to use when making requests (default: "Simple MCP Client")
+
+#### LiteLLM
+
+LiteLLM provides a unified interface to many different LLM providers. It supports models from OpenAI, Anthropic, Google, Azure, Mistral, Cohere, and more. The model name should be specified using the provider's format, optionally with a provider prefix.
+
+Example configurations:
+
+```json
+{
+  "llm": {
+    "provider": "litellm",
+    "model": "anthropic/claude-3-opus-20240229",
+    "api_key": "YOUR_ANTHROPIC_API_KEY",
+    "other_params": {
+      "temperature": 0.7,
+      "max_tokens": 4096,
+      "request_timeout": 60.0
+    }
+  }
+}
+```
+
+For OpenAI models:
+
+```json
+{
+  "llm": {
+    "provider": "litellm",
+    "model": "gpt-4-turbo",
+    "api_key": "YOUR_OPENAI_API_KEY",
+    "other_params": {
+      "temperature": 0.7
+    }
+  }
+}
+```
+
+LiteLLM will automatically look for the appropriate API key in environment variables based on the provider specified in the model name:
+
+- `OPENAI_API_KEY`: For OpenAI models
+- `ANTHROPIC_API_KEY`: For Anthropic models
+- `GOOGLE_API_KEY`: For Google models
+- `MISTRAL_API_KEY`: For Mistral models
+- `COHERE_API_KEY`: For Cohere models
+- `AZURE_API_KEY`: For Azure models
+
+You can also provide the API key directly in the configuration.
+
+LiteLLM supports additional parameters such as:
+
+- `request_timeout`: Timeout for API requests in seconds
+- `fallbacks`: List of fallback models to try if the primary model fails
+- `cache`: Enable response caching
 
 ## License
 

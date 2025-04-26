@@ -78,5 +78,8 @@ class LLMProviderFactory:
         elif provider.lower() == "openrouter":
             from .openrouter import OpenRouterProvider
             return OpenRouterProvider(model, api_url, api_key, **kwargs)
+        elif provider.lower() == "litellm":
+            from .litellm import LiteLLMProvider
+            return LiteLLMProvider(model, api_url, api_key, **kwargs)
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")

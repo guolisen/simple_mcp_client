@@ -4,3 +4,4 @@ prompt-toolkit>=3.0.0
 click>=8.0.0
 rich>=10.0.0
 python-dotenv>=0.19.0
+litellm>=1.0.0
