@@ -801,334 +801,49 @@ class ConsoleInterface:
             self.console.print(f"[red]Error setting up execution environment: {str(outer_e)}[/red]")
     
     async def _cmd_chat(self, args: str) -> None:
-        """Handle the chat command.
+        """Handle the chat command with ReAct agent integration.
         
         Args:
             args: Command parameters.
         """
-        if not self.llm_provider:
-            self.console.print("[red]Error: No LLM provider configured[/red]")
-            return
-        
-        connected_servers = self.server_manager.get_connected_servers()
-        if not connected_servers:
-            self.console.print("[yellow]Warning: No MCP servers connected. "
-                              "Tools will not be available.[/yellow]")
-        
-        # Create system message with available tools
-        all_tools = self.server_manager.get_all_tools()
-        
-        # Format tools for the system prompt
-        # Either use the enhanced formatter or fall back to the basic one
-        try:
-            tools_description = generate_tool_format(all_tools)
-        except Exception as e:
-            self.console.print(f"Warning using enhanced tool formatting, falling back to basic: {str(e)}")
-            # Fall back to basic formatting
-            tools_description = ""
-            for server_name, tools in all_tools.items():
-                tools_description += f"Server: {server_name}\n\n"
-                for tool in tools:
-                    tools_description += tool.format_for_llm() + "\n"
-
-        # Generate the enhanced modular system prompt
-        system_prompt = generate_system_prompt(
-            available_tools=tools_description,
-            include_mcp_guidance=True,
-            include_react_guidance=True
+        from .chat_utils import (
+            initialize_mcp_client, create_react_agent, display_chat_header,
+            run_chat_loop, cleanup_chat_resources
         )
-
-        self.llm_provider.set_system_message(system_prompt)
         
-        # count tools
-        tool_count = 0
-        for server_name, tools in all_tools.items():
-            for tool in tools:
-                tool_count += 1
-
-        self.console.print(Panel.fit(
-            f"[bold green]Chat mode started with {self.llm_provider.name} ({self.llm_provider.model})[/bold green]\n"
-            f"Connected servers: {', '.join(s.name for s in connected_servers)}\n"
-            f"Available tools: {tool_count}\n"
-            f"Type [bold]exit[/bold] to return to command mode",
-            title="MCP Chat"
-        ))
+        mcp_adapter = None
+        react_agent = None
         
-        messages = [{"role": "system", "content": system_prompt}]
+        try:
+            # Initialize MCP client adapter
+            try:
+                with self.console.status("[bold green]Initializing MCP client...[/bold green]"):
+                    mcp_adapter = await initialize_mcp_client(self.server_manager)
+            except RuntimeError as e:
+                self.console.print(f"[red]Error: {str(e)}[/red]")
+                return
+            
+            # Create and initialize ReAct agent
+            try:
+                with self.console.status("[bold green]Creating ReAct agent...[/bold green]"):
+                    react_agent = await create_react_agent(self.config, mcp_adapter)
+            except RuntimeError as e:
+                self.console.print(f"[red]Error: {str(e)}[/red]")
+                return
+            
+            # Display chat header
+            display_chat_header(self.console, react_agent, mcp_adapter)
+            
+            # Run the chat loop
+            await run_chat_loop(self.console, react_agent, mcp_adapter, self.session)
+            
+        except Exception as e:
+            self.console.print(f"[red]Unexpected error in chat mode: {str(e)}[/red]")
+            logging.error(f"Unexpected error in chat mode: {e}")
         
-        # Chat loop
-        while True:
-            # Get user input
-            try:
-                user_input = await self.session.prompt_async(
-                    HTML("<ansicyan><b>You:</b></ansicyan> "),
-                    style=self.style
-                )
-            except (EOFError, KeyboardInterrupt):
-                self.console.print("\n[yellow]Exiting chat mode...[/yellow]")
-                break
-            
-            user_input = user_input.strip()
-            if user_input.lower() == "exit":
-                self.console.print("[yellow]Exiting chat mode...[/yellow]")
-                break
-            
-            if not user_input:
-                continue
-            
-            messages.append({"role": "user", "content": user_input})
-            
-            # Get LLM response - use explicit context management to avoid conflicts
-            try:
-                status = self.console.status("[bold green]Thinking...[/bold green]")
-                status.__enter__()
-                llm_response = await self.llm_provider.get_response(messages)
-                status.__exit__(None, None, None)
-            except Exception as e:
-                # Ensure status is cleared even on error
-                try:
-                    status.__exit__(None, None, None)
-                except:
-                    pass
-                self.console.print(f"[red]Error getting LLM response: {str(e)}[/red]")
-                continue
-            
-            pattern = r'```json([\s\S]*?)```'
-            match = re.search(pattern, llm_response)
-
-            if match:
-                llm_response = match.group(1).strip()
-                print(llm_response)
-
-            # Translate tool format if needed
-            def translate_tool_format(text):
-                """
-                Translate from simple format to nested JSON if the first line is a tool name.
-
-                FROM:
-                filesystem_list_directory
-                {"path": "/home"}
-
-                TO:
-                {
-                "tool": "filesystem_list_directory",
-                "parameters": {
-                    "path": "/home"
-                }
-                }
-                """
-                lines = text.strip().split('\n', 1)
-                if len(lines) < 2:
-                    return text
-
-                potential_tool_name = lines[0].strip()
-                potential_params = lines[1].strip()
-
-                # Check if first line looks like a tool name (no spaces, no JSON characters)
-                if ' ' in potential_tool_name or '{' in potential_tool_name or '}' in potential_tool_name:
-                    return text
-
-                # Try to parse the second part as JSON
-                try:
-                    params = json.loads(potential_params)
-                    # Create the new format
-                    transformed = {
-                        "tool": potential_tool_name,
-                        "parameters": params
-                    }
-                    return json.dumps(transformed)
-                except json.JSONDecodeError:
-                    return text
-
-            # Apply translation if needed
-            llm_response = translate_tool_format(llm_response)
-
-            # Check if response is a tool call
-            try:
-                is_tool_call = False
-                try:
-                    tool_call = json.loads(llm_response)
-                    is_tool_call = True
-                except json.JSONDecodeError:
-                    is_tool_call = False
-                
-                if is_tool_call:
-                    if 'parameters' not in tool_call:
-                        tool_call['parameters'] = {}
-
-                    self.console.print(Panel(
-                        f"[bold]Executing tool:[/bold] {tool_call['tool']}\n"
-                        + (f"[bold]With parameters:[/bold] {json.dumps(tool_call['parameters'], indent=2)}" if 'parameters' in tool_call else ""),
-                        title="Assistant",
-                        border_style="yellow"
-                    ))
-                    
-                    try:
-                        # Execute the tool
-                        self.console.print(f"[bold green]Executing {tool_call['tool']}...[/bold green]")
-                        result = await self.server_manager.execute_tool(
-                            tool_call["tool"],
-                            tool_call["parameters"]
-                        )
-                        
-                        # Add assistant message to history
-                        messages.append({"role": "assistant", "content": llm_response})
-                        
-                        # Prepare the tool result
-                        if isinstance(result, str):
-                            formatted_result = result
-                        else:
-                            formatted_result = self._serialize_complex_object(result)
-                        
-                        # Create a new system prompt that combines the user query with the tool result
-                        new_system_prompt = (
-                            "You are a helpful assistant with access to tools. "
-                            "A tool has been called based on the user's question, and the result is provided below. "
-                            "Create a natural, conversational response that incorporates this tool result. "
-                            "If you need to call additional tools to fully answer the question, respond ONLY with a "
-                            "JSON object in the format: {\"tool\": \"tool-name\", \"parameters\": {\"key\": \"value\"}}. "
-                            "Otherwise, provide a complete and helpful response that addresses the user's original question "
-                            "using the tool result.\n\n"
-                            f"User's original question: {user_input}\n\n"
-                            f"Tool called: {tool_call['tool']}\n"
-                            f"Tool result: {formatted_result}"
-                        )
-                        
-                        # Replace the original system message temporarily for this response
-                        #original_system_message = messages[0]["content"]
-                        #messages[0]["content"] = new_system_prompt
-                        
-                        messages.append({"role": "user", "content": formatted_result})
-
-                        # Get final response from LLM
-                        self.console.print("[bold green]Processing result...[/bold green]")
-                        final_response = await self.llm_provider.get_response(messages)
-                        
-                        # Check if the final response is another tool call
-                        try:
-                            is_another_call = False
-                            try:
-                                another_tool_call = json.loads(final_response)
-                                is_another_call = True
-                            except json.JSONDecodeError:
-                                is_another_call = False
-
-                            if is_another_call:
-                                # It's another tool call, so we'll display it as such
-                                self.console.print(Panel(
-                                    f"[bold]Assistant needs to call another tool:[/bold] {another_tool_call['tool']}\n"
-                                    f"[bold]With parameters:[/bold] {json.dumps(another_tool_call['parameters'], indent=2)}",
-                                    title="Assistant",
-                                    border_style="yellow"
-                                ))
-                                
-                                # Execute the second tool
-                                self.console.print(f"[bold green]Executing {another_tool_call['tool']}...[/bold green]")
-                                second_result = await self.server_manager.execute_tool(
-                                    another_tool_call["tool"],
-                                    another_tool_call["parameters"]
-                                )
-                                
-                                # Format the result
-                                if isinstance(second_result, str):
-                                    second_formatted_result = second_result
-                                else:
-                                    second_formatted_result = self._serialize_complex_object(second_result)
-                                
-                                # Update the system prompt to include both tool results
-                                combined_system_prompt = (
-                                    "You are a helpful assistant with access to tools. "
-                                    "Two tools have been called based on the user's question, and the results are provided below. "
-                                    "Create a natural, conversational response that incorporates these tool results. "
-                                    "Focus on providing a complete and helpful response that addresses the user's original question.\n\n"
-                                    f"User's original question: {user_input}\n\n"
-                                    f"First tool called: {tool_call['tool']}\n"
-                                    f"First tool result: {formatted_result}\n\n"
-                                    f"Second tool called: {another_tool_call['tool']}\n"
-                                    f"Second tool result: {second_formatted_result}"
-                                )
-                                
-                                # Update the system message
-                                #messages[0]["content"] = combined_system_prompt
-                                
-                                messages.append({"role": "user", "content": second_formatted_result})
-
-                                # Get the combined final response
-                                self.console.print("[bold green]Processing combined results...[/bold green]")
-                                combined_final_response = await self.llm_provider.get_response(messages)
-                                
-                                self.console.print(Panel(
-                                    Markdown(combined_final_response),
-                                    title="Assistant",
-                                    border_style="green"
-                                ))
-                                
-                                # Add final response to messages
-                                messages.append({"role": "assistant", "content": combined_final_response})
-                                
-                                # Restore original system message
-                                #messages[0]["content"] = original_system_message
-                                
-                            else:
-                                # Not a tool call, display the response
-                                self.console.print(Panel(
-                                    Markdown(final_response),
-                                    title="Assistant",
-                                    border_style="green"
-                                ))
-                                
-                                # Add final response to messages
-                                messages.append({"role": "assistant", "content": final_response})
-                                
-                                # Restore original system message
-                                #messages[0]["content"] = original_system_message
-                                
-                        except json.JSONDecodeError:
-                            # Not a tool call (not valid JSON), display response directly
-                            self.console.print(Panel(
-                                Markdown(final_response),
-                                title="Assistant",
-                                border_style="green"
-                            ))
-                            
-                            # Add final response to messages
-                            messages.append({"role": "assistant", "content": final_response})
-                            
-                            # Restore original system message
-                            #messages[0]["content"] = original_system_message
-                        
-                    except Exception as e:
-                        error_msg = f"Error executing tool: {str(e)}"
-                        self.console.print(f"[red]{error_msg}[/red]")
-                        
-                        # Add error as system message
-                        messages.append({"role": "system", "content": error_msg})
-                        
-                else:
-                    # Not a tool call, display response directly
-                    self.console.print(Panel(
-                        Markdown(llm_response),
-                        title="Assistant",
-                        border_style="green"
-                    ))
-                    
-                    # Add response to messages
-                    messages.append({"role": "assistant", "content": llm_response})
-            
-            except Exception as e:
-                # Handle any error in the tool execution flow
-                self.console.print(f"[red]Error processing response: {str(e)}[/red]")
-                
-                # Display the original response if possible
-                if 'llm_response' in locals():
-                    self.console.print(Panel(
-                        Markdown(llm_response),
-                        title="Assistant (Error Processing)",
-                        border_style="red"
-                    ))
-                    
-                    # Add response to messages
-                    messages.append({"role": "assistant", "content": llm_response})
+        finally:
+            # Clean up resources
+            await cleanup_chat_resources(mcp_adapter, react_agent)
     
     async def _cmd_config(self, args: str) -> None:
         """Handle the config command.
