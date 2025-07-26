@@ -6,7 +6,9 @@
     "api_key": "sk-zk2199591d79521bad0cdbbd3e65202b8876837fdad61f02",
     "other_params": {
       "temperature": 0.7,
-      "max_tokens": 4096
+      "max_tokens": 4096,
+      "max_loop_iterations": 15,
+      "request_timeout": 60.0
     }
   },
   "mcpServers": {

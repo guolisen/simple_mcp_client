@@ -31,6 +31,8 @@ class ReactAgentProvider:
         self.tools = []
         self.system_message = ""
         self.timeout = config.config.llm.other_params.get("request_timeout", 60.0)
+        self.loop_counter = 0
+        self.max_loop_iterations = config.config.llm.other_params.get("max_loop_iterations", 15)
     
     async def initialize(self) -> bool:
         """Initialize the ReAct agent with LLM and MCP tools.
@@ -83,6 +85,14 @@ class ReactAgentProvider:
         
         def should_end(state: MessagesState) -> str:
             """Determine if the conversation should end or continue with tools."""
+            # Increment the loop counter
+            self.loop_counter += 1
+            
+            # Check if max iterations reached
+            if self.loop_counter >= self.max_loop_iterations:
+                logging.warning(f"ReAct agent reached maximum loop iterations ({self.max_loop_iterations}), forcing end")
+                return "end"
+            
             last_message = state["messages"][-1]
             
             # Check if last message is from the AI and doesn't contain a tool call
@@ -133,6 +143,9 @@ class ReactAgentProvider:
         """
         if not self.graph:
             raise RuntimeError("ReAct agent not initialized. Call initialize() first.")
+        
+        # Reset loop counter for new conversation
+        self.loop_counter = 0
         
         try:
             # Convert messages to the format expected by LangGraph
@@ -188,6 +201,9 @@ class ReactAgentProvider:
         """
         if not self.graph:
             raise RuntimeError("ReAct agent not initialized. Call initialize() first.")
+        
+        # Reset loop counter for new conversation
+        self.loop_counter = 0
         
         try:
             # Convert messages to the format expected by LangGraph
