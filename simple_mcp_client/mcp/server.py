@@ -2,15 +2,11 @@
 import asyncio
 import logging
 import os
-import shutil
-from contextlib import AsyncExitStack
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 try:
     from mcp.client.session import ClientSession
-    from mcp.client.sse import sse_client
-    from mcp.client.stdio import stdio_client
     from mcp.types import Implementation
 except ImportError:
     logging.error("""
@@ -28,177 +24,61 @@ except ImportError:
         async def initialize(self): return type('obj', (object,), {'serverInfo': None})
     
     class Implementation: pass
-    
-    async def sse_client(url): return (None, None)
-    async def stdio_client(params): return (None, None)
 
 from ..config import ServerConfig
-
-
-class Tool:
-    """Represents a tool with its properties."""
-
-    def __init__(
-        self, name: str, description: str, input_schema: Dict[str, Any]
-    ) -> None:
-        """Initialize a Tool instance.
-        
-        Args:
-            name: The name of the tool.
-            description: The description of the tool.
-            input_schema: The JSON schema for the tool's input.
-        """
-        self.name: str = name
-        self.description: str = description
-        self.input_schema: Dict[str, Any] = input_schema
-
-    def format_for_llm(self) -> str:
-        """Format tool information for LLM.
-
-        Returns:
-            A formatted string describing the tool.
-        """
-        args_desc = []
-        if "properties" in self.input_schema:
-            for param_name, param_info in self.input_schema["properties"].items():
-                arg_desc = (
-                    f"- {param_name}: {param_info.get('description', 'No description')}"
-                )
-                if param_name in self.input_schema.get("required", []):
-                    arg_desc += " (required)"
-                args_desc.append(arg_desc)
-
-        return f"""
-Tool: {self.name}
-Description: {self.description}
-Arguments:
-{chr(10).join(args_desc)}
-"""
-
-
-class Resource:
-    """Represents a resource with its properties."""
-
-    def __init__(
-        self, uri: str, name: str, mime_type: Optional[str] = None, description: Optional[str] = None
-    ) -> None:
-        """Initialize a Resource instance.
-        
-        Args:
-            uri: The URI of the resource.
-            name: The name of the resource.
-            mime_type: The MIME type of the resource.
-            description: The description of the resource.
-        """
-        # Ensure uri is a string
-        self.uri: str = str(uri) if uri is not None else ""
-        self.name: str = name
-        self.mime_type: Optional[str] = mime_type
-        self.description: Optional[str] = description
-
-
-class ResourceTemplate:
-    """Represents a resource template with its properties."""
-
-    def __init__(
-        self, uri_template: str, name: str, mime_type: Optional[str] = None, description: Optional[str] = None
-    ) -> None:
-        """Initialize a ResourceTemplate instance.
-        
-        Args:
-            uri_template: The URI template of the resource.
-            name: The name of the resource.
-            mime_type: The MIME type of the resource.
-            description: The description of the resource.
-        """
-        # Ensure uri_template is a string
-        self.uri_template: str = str(uri_template) if uri_template is not None else ""
-        self.name: str = name
-        self.mime_type: Optional[str] = mime_type
-        self.description: Optional[str] = description
-
-
-class Prompt:
-    """Represents a prompt with its properties."""
-
-    def __init__(
-        self, name: str, description: str, input_schema: Dict[str, Any]
-    ) -> None:
-        """Initialize a Prompt instance.
-        
-        Args:
-            name: The name of the prompt.
-            description: The description of the prompt.
-            input_schema: The JSON schema for the prompt's input.
-        """
-        self.name: str = name
-        self.description: str = description
-        self.input_schema: Dict[str, Any] = input_schema
-
-    def format_for_llm(self) -> str:
-        """Format prompt information for LLM.
-
-        Returns:
-            A formatted string describing the prompt.
-        """
-        args_desc = []
-        if "properties" in self.input_schema:
-            for param_name, param_info in self.input_schema["properties"].items():
-                arg_desc = (
-                    f"- {param_name}: {param_info.get('description', 'No description')}"
-                )
-                if param_name in self.input_schema.get("required", []):
-                    arg_desc += " (required)"
-                args_desc.append(arg_desc)
-
-        return f"""
-Prompt: {self.name}
-Description: {self.description}
-Arguments:
-{chr(10).join(args_desc)}
-"""
-
-
-class PromptFormat:
-    """Represents a prompt format with its properties."""
-
-    def __init__(
-        self, name: str, description: Optional[str] = None, schema: Optional[Dict[str, Any]] = None
-    ) -> None:
-        """Initialize a PromptFormat instance.
-        
-        Args:
-            name: The name of the format.
-            description: The description of the format.
-            schema: The schema describing the format.
-        """
-        self.name: str = name
-        self.description: Optional[str] = description
-        self.schema: Optional[Dict[str, Any]] = schema
+from .models import Tool, Resource, ResourceTemplate, Prompt, PromptFormat
+from .connection import ConnectionManager
+from .exceptions import (
+    MCPServerError, ConnectionError, DisconnectedError,
+    ToolExecutionError, ResourceAccessError, PromptError
+)
 
 
 class MCPServer:
     """Manages connection to an MCP server and tool execution."""
 
-    def __init__(self, name: str, config: ServerConfig) -> None:
+    def __init__(
+        self, 
+        name: str, 
+        config: ServerConfig,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+        backoff_factor: float = 1.5,
+        health_check_interval: float = 60.0
+    ) -> None:
         """Initialize an MCPServer instance.
         
         Args:
             name: The name of the server.
             config: The server configuration.
+            max_retries: Maximum number of connection retries.
+            retry_delay: Initial delay between retries in seconds.
+            backoff_factor: Factor to increase delay between retries.
+            health_check_interval: Interval between health checks in seconds.
         """
         self.name: str = name
         self.config: ServerConfig = config
-        self.session: Optional[ClientSession] = None
-        self._exit_stack: AsyncExitStack = AsyncExitStack()
-        self._cleanup_lock: asyncio.Lock = asyncio.Lock()
+        
+        # Create connection manager
+        self.connection_manager = ConnectionManager(
+            server_name=name,
+            server_type=config.type,
+            url=config.url,
+            command=config.command,
+            args=config.args,
+            env=config.env,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            backoff_factor=backoff_factor,
+            health_check_interval=health_check_interval
+        )
+        
         self._tools: List[Tool] = []
         self._resources: List[Resource] = []
         self._resource_templates: List[ResourceTemplate] = []
         self._prompts: List[Prompt] = []
         self._prompt_formats: List[PromptFormat] = []
         self._server_info: Optional[Implementation] = None
-        self._connected: bool = False
 
     @property
     def is_connected(self) -> bool:
@@ -207,7 +87,16 @@ class MCPServer:
         Returns:
             True if the server is connected, False otherwise.
         """
-        return self._connected and self.session is not None
+        return self.connection_manager.is_connected
+
+    @property
+    def session(self) -> Optional[ClientSession]:
+        """Get the client session.
+        
+        Returns:
+            The client session if connected, None otherwise.
+        """
+        return self.connection_manager.session
 
     @property
     def server_info(self) -> Optional[Implementation]:
@@ -274,197 +163,119 @@ class MCPServer:
             return True
         
         try:
-            if self.config.type.lower() == "sse":
-                if not self.config.url:
-                    logging.error(f"URL is required for SSE server {self.name}")
-                    return False
-                
-                url = self.config.url
-                if not urlparse(url).scheme:
-                    logging.error(f"Invalid URL for SSE server {self.name}: {url}")
-                    return False
-                
-                logging.info(f"Connecting to SSE server {self.name} at {url}")
-                streams = await self._exit_stack.enter_async_context(sse_client(url))
-                read, write = streams
-            
-            elif self.config.type.lower() == "stdio":
-                if not self.config.command:
-                    logging.error(f"Command is required for stdio server {self.name}")
-                    return False
-                
-                # Handle special case for npx and validate command
-                command = self.config.command
-                if command == "npx":
-                    command = shutil.which("npx")
-                
-                if command is None:
-                    logging.error(f"Invalid command for stdio server {self.name}: command not found")
-                    return False
-                
-                args = self.config.args
-                env = {**os.environ, **self.config.env} if self.config.env else None
-                
-                logging.info(f"Connecting to stdio server {self.name} with command {command}")
-                
-                try:
-                    # Use StdioServerParameters for better structure
-                    from mcp.client.stdio import StdioServerParameters
-                    server_params = StdioServerParameters(
-                        command=command,
-                        args=args,
-                        env=env
-                    )
-                    
-                    stdio_transport = await self._exit_stack.enter_async_context(
-                        stdio_client(server_params)
-                    )
-                    read, write = stdio_transport
-                except Exception as e:
-                    logging.error(f"Error connecting to stdio server {self.name}: {e}")
-                    await self.disconnect()
-                    return False
-            
-            else:
-                logging.error(f"Unsupported server type for {self.name}: {self.config.type}")
-                return False
-            
-            # Initialize the session
-            self.session = await self._exit_stack.enter_async_context(
-                ClientSession(read, write)
-            )
-            init_result = await self.session.initialize()
-            self._server_info = init_result.serverInfo
-            
-            logging.info(f"Connected to MCP server {self.name}")
-            self._connected = True
-            
-            # Load the server capabilities
-            await self._load_capabilities()
-            
-            return True
-        
+            success, server_info = await self.connection_manager.connect()
+            if success:
+                self._server_info = server_info
+                # Load the server capabilities
+                await self._load_capabilities()
+                return True
+            return False
         except Exception as e:
             logging.error(f"Error connecting to MCP server {self.name}: {e}")
-            await self.disconnect()
             return False
 
     async def disconnect(self) -> None:
         """Disconnect from the MCP server."""
-        async with self._cleanup_lock:
-            try:
-                await self._exit_stack.aclose()
-                self.session = None
-                self._connected = False
-                self._tools = []
-                self._resources = []
-                self._resource_templates = []
-                self._prompts = []
-                self._prompt_formats = []
-                self._server_info = None
-                logging.info(f"Disconnected from MCP server {self.name}")
-            except Exception as e:
-                logging.error(f"Error during disconnect of server {self.name}: {e}")
+        await self.connection_manager.disconnect()
+        self._tools = []
+        self._resources = []
+        self._resource_templates = []
+        self._prompts = []
+        self._prompt_formats = []
+        self._server_info = None
 
     async def _load_capabilities(self) -> None:
         """Load server capabilities (tools, resources, etc.)."""
         if not self.is_connected or not self.session:
-            raise RuntimeError(f"Server {self.name} not connected")
+            raise DisconnectedError(f"Server {self.name} not connected")
+        
+        # Define a helper function for loading capabilities with retry
+        async def load_with_retry(operation, error_message, result_processor):
+            try:
+                result = await self.connection_manager.execute_with_retry(
+                    operation,
+                    operation_name=f"load_{error_message}"
+                )
+                return result_processor(result)
+            except Exception as e:
+                logging.warning(f"Error loading {error_message} from {self.name}: {e}")
+                return []
         
         # Load tools
-        try:
-            tools_response = await self.session.list_tools()
-            self._tools = []
-            
-            if hasattr(tools_response, "tools"):
-                for tool in tools_response.tools:
-                    self._tools.append(Tool(tool.name, tool.description, tool.inputSchema))
-        except Exception as e:
-            logging.error(f"Error loading tools from {self.name}: {e}")
+        self._tools = await load_with_retry(
+            lambda: self.session.list_tools(),
+            "tools",
+            lambda result: [
+                Tool(tool.name, tool.description, tool.inputSchema)
+                for tool in getattr(result, "tools", [])
+            ]
+        )
         
         # Load resources
-        try:
-            resources_response = await self.session.list_resources()
-            self._resources = []
-            
-            if hasattr(resources_response, "resources"):
-                for resource in resources_response.resources:
-                    try:
-                        self._resources.append(
-                            Resource(
-                                getattr(resource, "uri", ""), 
-                                getattr(resource, "name", "Unknown"),
-                                getattr(resource, "mimeType", None),
-                                getattr(resource, "description", None)
-                            )
-                        )
-                    except Exception as res_err:
-                        logging.warning(f"Error adding resource: {res_err}. Skipping.")
-        except Exception as e:
-            logging.info(f"no resources from {self.name}: {e}")
+        self._resources = await load_with_retry(
+            lambda: self.session.list_resources(),
+            "resources",
+            lambda result: [
+                Resource(
+                    getattr(resource, "uri", ""), 
+                    getattr(resource, "name", "Unknown"),
+                    getattr(resource, "mimeType", None),
+                    getattr(resource, "description", None)
+                )
+                for resource in getattr(result, "resources", [])
+            ]
+        )
         
         # Load resource templates
-        try:
-            templates_response = await self.session.list_resource_templates()
-            self._resource_templates = []
-            
-            if hasattr(templates_response, "resourceTemplates"):
-                for template in templates_response.resourceTemplates:
-                    try:
-                        self._resource_templates.append(
-                            ResourceTemplate(
-                                getattr(template, "uriTemplate", ""), 
-                                getattr(template, "name", "Unknown"),
-                                getattr(template, "mimeType", None),
-                                getattr(template, "description", None)
-                            )
-                        )
-                    except Exception as template_err:
-                        logging.warning(f"Error adding resource template: {template_err}. Skipping.")
-        except Exception as e:
-            logging.info(f"no resource templates from {self.name}: {e}")
-            
+        self._resource_templates = await load_with_retry(
+            lambda: self.session.list_resource_templates(),
+            "resource templates",
+            lambda result: [
+                ResourceTemplate(
+                    getattr(template, "uriTemplate", ""), 
+                    getattr(template, "name", "Unknown"),
+                    getattr(template, "mimeType", None),
+                    getattr(template, "description", None)
+                )
+                for template in getattr(result, "resourceTemplates", [])
+            ]
+        )
+        
         # Load prompts if supported
-        self._prompts = []
         if hasattr(self.session, "list_prompts"):
-            try:
-                prompts_response = await self.session.list_prompts()
-                
-                if hasattr(prompts_response, "prompts"):
-                    for prompt in prompts_response.prompts:
-                        # Check if all required attributes exist
-                        if hasattr(prompt, "name") and hasattr(prompt, "description"):
-                            # Use getattr with a default empty dict for inputSchema
-                            input_schema = getattr(prompt, "inputSchema", {})
-                            self._prompts.append(
-                                Prompt(
-                                    prompt.name,
-                                    prompt.description,
-                                    input_schema
-                                )
-                            )
-            except Exception as e:
-                logging.info(f"no prompts from {self.name}: {e}")
+            self._prompts = await load_with_retry(
+                lambda: self.session.list_prompts(),
+                "prompts",
+                lambda result: [
+                    Prompt(
+                        prompt.name,
+                        prompt.description,
+                        getattr(prompt, "inputSchema", {})
+                    )
+                    for prompt in getattr(result, "prompts", [])
+                    if hasattr(prompt, "name") and hasattr(prompt, "description")
+                ]
+            )
+        else:
+            self._prompts = []
             
         # Load prompt formats if supported
-        self._prompt_formats = []
         if hasattr(self.session, "list_prompt_formats"):
-            try:
-                formats_response = await self.session.list_prompt_formats()
-                
-                if hasattr(formats_response, "promptFormats"):
-                    for format in formats_response.promptFormats:
-                        # Check if the required name attribute exists
-                        if hasattr(format, "name"):
-                            self._prompt_formats.append(
-                                PromptFormat(
-                                    format.name,
-                                    getattr(format, "description", None),
-                                    getattr(format, "schema", None)
-                                )
-                            )
-            except Exception as e:
-                logging.info(f"no prompt formats from {self.name}: {e}")
+            self._prompt_formats = await load_with_retry(
+                lambda: self.session.list_prompt_formats(),
+                "prompt formats",
+                lambda result: [
+                    PromptFormat(
+                        format.name,
+                        getattr(format, "description", None),
+                        getattr(format, "schema", None)
+                    )
+                    for format in getattr(result, "promptFormats", [])
+                    if hasattr(format, "name")
+                ]
+            )
+        else:
+            self._prompt_formats = []
 
     async def execute_tool(
         self,
@@ -485,30 +296,20 @@ class MCPServer:
             The result of the tool execution.
             
         Raises:
-            RuntimeError: If the server is not connected.
-            Exception: If the tool execution fails.
+            DisconnectedError: If the server is not connected.
+            ToolExecutionError: If the tool execution fails.
         """
         if not self.is_connected or not self.session:
-            raise RuntimeError(f"Server {self.name} not connected")
+            raise DisconnectedError(f"Server {self.name} not connected")
         
-        attempt = 0
-        while attempt < retries:
-            try:
-                logging.info(f"Executing {tool_name} on {self.name}...")
-                result = await self.session.call_tool(tool_name, arguments)
-                return result
-            
-            except Exception as e:
-                attempt += 1
-                logging.warning(
-                    f"Error executing tool: {e}. Attempt {attempt} of {retries}."
-                )
-                if attempt < retries:
-                    logging.info(f"Retrying in {delay} seconds...")
-                    await asyncio.sleep(delay)
-                else:
-                    logging.error("Max retries reached. Failing.")
-                    raise
+        try:
+            return await self.connection_manager.execute_with_retry(
+                lambda: self.session.call_tool(tool_name, arguments),
+                retries=retries,
+                operation_name=f"execute_tool_{tool_name}"
+            )
+        except Exception as e:
+            raise ToolExecutionError(f"Error executing tool {tool_name} on {self.name}: {str(e)}")
 
     async def read_resource(self, uri: str) -> Any:
         """Read a resource from the server.
@@ -520,11 +321,11 @@ class MCPServer:
             The content of the resource.
             
         Raises:
-            RuntimeError: If the server is not connected.
-            Exception: If the resource read fails.
+            DisconnectedError: If the server is not connected.
+            ResourceAccessError: If the resource read fails.
         """
         if not self.is_connected or not self.session:
-            raise RuntimeError(f"Server {self.name} not connected")
+            raise DisconnectedError(f"Server {self.name} not connected")
         
         # Ensure uri is a string
         uri_str = str(uri) if uri is not None else ""
@@ -532,11 +333,12 @@ class MCPServer:
             raise ValueError("Resource URI cannot be empty")
             
         try:
-            result = await self.session.read_resource(uri_str)
-            return result
+            return await self.connection_manager.execute_with_retry(
+                lambda: self.session.read_resource(uri_str),
+                operation_name=f"read_resource_{uri_str}"
+            )
         except Exception as e:
-            logging.error(f"Error reading resource {uri_str} from {self.name}: {e}")
-            raise
+            raise ResourceAccessError(f"Error reading resource {uri_str} from {self.name}: {str(e)}")
 
     async def has_tool(self, tool_name: str) -> bool:
         """Check if the server has a tool with the given name.
@@ -609,40 +411,31 @@ class MCPServer:
             The prompt content.
             
         Raises:
-            RuntimeError: If the server is not connected.
-            Exception: If the prompt retrieval fails.
+            DisconnectedError: If the server is not connected.
+            PromptError: If the prompt retrieval fails.
         """
         if not self.is_connected or not self.session:
-            raise RuntimeError(f"Server {self.name} not connected")
+            raise DisconnectedError(f"Server {self.name} not connected")
         
         if not await self.has_prompt(prompt_name):
-            raise ValueError(f"Prompt {prompt_name} not found on server {self.name}")
+            raise PromptError(f"Prompt {prompt_name} not found on server {self.name}")
         
-        attempt = 0
-        while attempt < retries:
-            try:
-                logging.info(f"Getting prompt {prompt_name} from {self.name}...")
-                
-                # Check if session has get_prompt method
-                if not hasattr(self.session, "get_prompt"):
-                    raise RuntimeError(f"Server {self.name} does not support getting prompts")
-                
-                # Call get_prompt with arguments and optional format
+        # Check if session has get_prompt method
+        if not hasattr(self.session, "get_prompt"):
+            raise PromptError(f"Server {self.name} does not support getting prompts")
+        
+        try:
+            # Define the operation based on whether format_name is provided
+            async def get_prompt_operation():
                 if format_name:
-                    result = await self.session.get_prompt(prompt_name, arguments, format_name)
+                    return await self.session.get_prompt(prompt_name, arguments, format_name)
                 else:
-                    result = await self.session.get_prompt(prompt_name, arguments)
-                
-                return result
-                
-            except Exception as e:
-                attempt += 1
-                logging.warning(
-                    f"Error getting prompt: {e}. Attempt {attempt} of {retries}."
-                )
-                if attempt < retries:
-                    logging.info(f"Retrying in {delay} seconds...")
-                    await asyncio.sleep(delay)
-                else:
-                    logging.error("Max retries reached. Failing.")
-                    raise
+                    return await self.session.get_prompt(prompt_name, arguments)
+            
+            return await self.connection_manager.execute_with_retry(
+                get_prompt_operation,
+                retries=retries,
+                operation_name=f"get_prompt_{prompt_name}"
+            )
+        except Exception as e:
+            raise PromptError(f"Error getting prompt {prompt_name} from {self.name}: {str(e)}")

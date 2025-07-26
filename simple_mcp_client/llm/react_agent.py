@@ -74,10 +74,19 @@ class ReactAgentProvider:
             """Call the language model with bound tools."""
             # Add system message if not present
             messages = state["messages"]
-            if not messages or not isinstance(messages[0], SystemMessage):
+            if not messages:
                 if self.system_message:
-                    system_msg = SystemMessage(content=self.system_message)
-                    messages = [system_msg] + messages
+                    # If no system message found, add our own
+                    messages.insert(0, SystemMessage(content=self.system_message))
+            else:
+                found = False
+                for _, msg in enumerate(messages):
+                    if isinstance(msg, SystemMessage):
+                        found = True
+                        break
+                if not found and self.system_message:
+                    # If no system message found, add our own
+                    messages.insert(0, SystemMessage(content=self.system_message))
             
             # Bind tools to the model and invoke
             response = self.model.bind_tools(self.tools).invoke(messages)
