@@ -12,6 +12,10 @@ from simple_mcp_client.config import Configuration
 from simple_mcp_client.console import ConsoleInterface
 from simple_mcp_client.mcp import ServerManager
 
+#os.environ['LANGCHAIN_TRACING_V2'] = "true"
+#os.environ['LANGCHAIN_ENDPOINT'] = "https://api.smith.langchain.com"
+#os.environ['LANGCHAIN_API_KEY'] = "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"
+#os.environ['LANGCHAIN_PROJECT'] = "pr-silver-bank-1"
 
 def setup_logging() -> None:
     """Set up logging configuration."""

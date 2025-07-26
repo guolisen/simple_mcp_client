@@ -2,6 +2,7 @@
   "llm": {
     "provider": "openai",
     "model": "grok-3-mini",
+    "_model": "qwen3-235b-a22b",
     "api_url": "https://api.zhizengzeng.com/v1",
     "api_key": "sk-zk2199591d79521bad0cdbbd3e65202b8876837fdad61f02",
     "other_params": {
