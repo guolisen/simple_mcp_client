@@ -55,7 +55,7 @@
       "env": {}
     },
     "Jira": {
-      "enable": true,
+      "enable": false,
       "type": "stdio",
       "url": "",
       "command": "docker",

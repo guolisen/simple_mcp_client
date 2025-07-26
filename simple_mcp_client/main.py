@@ -74,11 +74,11 @@ async def run_client() -> None:
             "Type [bold cyan]help[/bold cyan] to see available commands\n"
         )
         
-        # If there's a default server, try to connect
-        default_server = config.config.default_server
-        if default_server:
-            console.print(f"Connecting to default server: {default_server}...")
-            await server_manager.connect_server(default_server)
+        # Connect to all enabled servers
+        for server_name, server_config in config.config.mcpServers.items():
+            if server_config.enable:
+                console.print(f"Connecting to enabled server: {server_name}...")
+                await server_manager.connect_server(server_name)
         
         # Main command loop
         while True:
