@@ -5,7 +5,7 @@ import asyncio
 import json
 
 from langchain.chat_models import init_chat_model
-from langgraph.graph import StateGraph, MessagesState, START
+from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, SystemMessage, AIMessage
@@ -81,6 +81,18 @@ class ReactAgentProvider:
             response = self.model.bind_tools(self.tools).invoke(messages)
             return {"messages": messages + [response]}
         
+        def should_end(state: MessagesState) -> str:
+            """Determine if the conversation should end or continue with tools."""
+            last_message = state["messages"][-1]
+            
+            # Check if last message is from the AI and doesn't contain a tool call
+            if (isinstance(last_message, AIMessage) and 
+                not getattr(last_message, "tool_calls", None)):
+                return "end"
+            
+            # If the message is a tool message or has tool calls, continue with tools
+            return "tools"
+        
         # Build the StateGraph
         builder = StateGraph(MessagesState)
         builder.add_node("call_model", call_model)
@@ -90,7 +102,12 @@ class ReactAgentProvider:
         builder.add_edge(START, "call_model")
         builder.add_conditional_edges(
             "call_model",
-            tools_condition,
+            should_end,
+            {
+                "tools": "tools",
+                "end": END,
+                "__end__": END
+            }
         )
         builder.add_edge("tools", "call_model")
         

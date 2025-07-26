@@ -44,6 +44,13 @@ When working on tasks, follow this reasoning and acting process:
    - Plan additional actions if needed
    - Prepare a clear response based on all information gathered
 
+5. ENDING: Properly conclude the ReAct loop
+   - Recognize when a task is fully complete and no more tool calls are needed
+   - Provide a final comprehensive response that directly answers the user's request
+   - Summarize key findings and actions taken when appropriate
+   - Do not make additional tool calls once you have all needed information
+   - End with actionable insights or next steps if relevant
+
 This iterative process ensures thorough analysis and effective problem-solving for Kubernetes management tasks.
 """
 
