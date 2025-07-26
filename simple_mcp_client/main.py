@@ -19,16 +19,33 @@ from simple_mcp_client.mcp import ServerManager
 
 def setup_logging() -> None:
     """Set up logging configuration."""
-    log_level = os.environ.get("MCP_LOG_LEVEL", "INFO").upper()
-    log_format = "%(asctime)s - %(levelname)s - %(message)s"
+    from logging.handlers import RotatingFileHandler
     
+    # Create logs directory if it doesn't exist
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    
+    log_file = os.path.join(log_dir, "mcp_client.log")
+    log_level = os.environ.get("MCP_LOG_LEVEL", "INFO").upper()
+    log_format = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+    
+    # Configure logging with a file handler instead of stream handler
     logging.basicConfig(
         level=getattr(logging, log_level),
         format=log_format,
         handlers=[
-            logging.StreamHandler(sys.stderr),
+            # Use RotatingFileHandler to prevent log files from growing too large
+            RotatingFileHandler(
+                log_file,
+                maxBytes=10*1024*1024,  # 10MB
+                backupCount=5,
+                encoding='utf-8'
+            ),
         ]
     )
+    
+    # Log startup information
+    logging.info("Logging configured to write to %s", log_file)
 
 
 async def handle_command(
@@ -89,7 +106,8 @@ async def run_client() -> None:
             try:
                 # Get user input
                 user_input = await interface.session.prompt_async(
-                    HTML("<ansicyan><b>MCP></b></ansicyan> "),
+                    #HTML("<ansicyan><b>MCP></b></ansicyan> "),
+                    "MCP> ",
                     style=interface.style
                 )
                 

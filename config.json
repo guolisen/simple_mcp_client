@@ -38,7 +38,7 @@
       "env": {}
     },
     "tavily": {
-      "enable": true,
+      "enable": false,
       "type": "stdio",
       "url": "",
       "command": "npx",

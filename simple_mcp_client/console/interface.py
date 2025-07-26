@@ -825,7 +825,7 @@ class ConsoleInterface:
             
             # Create and initialize ReAct agent
             try:
-                with self.console.status("[bold green]Creating ReAct agent...[/bold green]"):
+                with self.console.status("[bold green]Creating ReAct agent and loading MCP tools...[/bold green]"):
                     react_agent = await create_react_agent(self.config, mcp_adapter)
             except RuntimeError as e:
                 self.console.print(f"[red]Error: {str(e)}[/red]")
