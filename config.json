@@ -13,6 +13,7 @@
   },
   "mcpServers": {
     "k8s": {
+      "enable": false,
       "type": "sse",
       "url": "http://127.0.0.1:32085/sse",
       "command": null,
@@ -20,6 +21,7 @@
       "env": {}
     },
     "lcu": {
+      "enable": false,
       "type": "sse",
       "url": "http://127.0.0.1:8012/sse",
       "command": null,
@@ -27,6 +29,7 @@
       "env": {}
     },
     "weather": {
+      "enable": false,
       "type": "sse",
       "url": "http://127.0.0.1:8010/sse",
       "command": null,
@@ -34,6 +37,7 @@
       "env": {}
     },
     "tavily": {
+      "enable": true,
       "type": "stdio",
       "url": "",
       "command": "npx",
@@ -43,12 +47,44 @@
       }
     },
     "gaode": {
+      "enable": true,
       "type": "sse",
       "url": "https://mcp.amap.com/sse?key=ed40afb4730ce2c8f5523c2fceca08be",
       "command": "",
       "args": [],
       "env": {}
+    },
+    "Jira": {
+      "enable": true,
+      "type": "stdio",
+      "url": "",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "CONFLUENCE_URL",
+        "-e",
+        "CONFLUENCE_USERNAME",
+        "-e",
+        "CONFLUENCE_API_TOKEN",
+        "-e",
+        "JIRA_URL",
+        "-e",
+        "JIRA_USERNAME",
+        "-e",
+        "JIRA_API_TOKEN",
+        "ghcr.io/sooperset/mcp-atlassian:latest"
+      ],
+      "env": {
+        "CONFLUENCE_URL": "https://your-company.atlassian.net/wiki",
+        "CONFLUENCE_USERNAME": "your.email@company.com",
+        "CONFLUENCE_API_TOKEN": "your_confluence_api_token",
+        "JIRA_URL": "https://your-company.atlassian.net",
+        "JIRA_USERNAME": "your.email@company.com",
+        "JIRA_API_TOKEN": "your_jira_api_token"
+      }
     }
-  },
-  "default_server": "tavily"
+  }
 }
