@@ -12,19 +12,40 @@ from simple_mcp_client.config import Configuration
 from simple_mcp_client.console import ConsoleInterface
 from simple_mcp_client.mcp import ServerManager
 
+#os.environ['LANGCHAIN_TRACING_V2'] = "true"
+#os.environ['LANGCHAIN_ENDPOINT'] = "https://api.smith.langchain.com"
+#os.environ['LANGCHAIN_API_KEY'] = "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"
+#os.environ['LANGCHAIN_PROJECT'] = "pr-silver-bank-1"
 
 def setup_logging() -> None:
     """Set up logging configuration."""
-    log_level = os.environ.get("MCP_LOG_LEVEL", "INFO").upper()
-    log_format = "%(asctime)s - %(levelname)s - %(message)s"
+    from logging.handlers import RotatingFileHandler
     
+    # Create logs directory if it doesn't exist
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    
+    log_file = os.path.join(log_dir, "mcp_client.log")
+    log_level = os.environ.get("MCP_LOG_LEVEL", "INFO").upper()
+    log_format = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
+    
+    # Configure logging with a file handler instead of stream handler
     logging.basicConfig(
         level=getattr(logging, log_level),
         format=log_format,
         handlers=[
-            logging.StreamHandler(sys.stderr),
+            # Use RotatingFileHandler to prevent log files from growing too large
+            RotatingFileHandler(
+                log_file,
+                maxBytes=10*1024*1024,  # 10MB
+                backupCount=5,
+                encoding='utf-8'
+            ),
         ]
     )
+    
+    # Log startup information
+    logging.info("Logging configured to write to %s", log_file)
 
 
 async def handle_command(
@@ -74,18 +95,19 @@ async def run_client() -> None:
             "Type [bold cyan]help[/bold cyan] to see available commands\n"
         )
         
-        # If there's a default server, try to connect
-        default_server = config.config.default_server
-        if default_server:
-            console.print(f"Connecting to default server: {default_server}...")
-            await server_manager.connect_server(default_server)
+        # Connect to all enabled servers
+        for server_name, server_config in config.config.mcpServers.items():
+            if server_config.enable:
+                console.print(f"Connecting to enabled server: {server_name}...")
+                await server_manager.connect_server(server_name)
         
         # Main command loop
         while True:
             try:
                 # Get user input
                 user_input = await interface.session.prompt_async(
-                    HTML("<ansicyan><b>MCP></b></ansicyan> "),
+                    #HTML("<ansicyan><b>MCP></b></ansicyan> "),
+                    "MCP> ",
                     style=interface.style
                 )
                 

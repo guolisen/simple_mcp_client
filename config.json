@@ -1,23 +1,28 @@
 {
   "llm": {
     "provider": "openai",
-    "model": "GLM-4-Flash",
-    "api_url": "https://open.bigmodel.cn/api/paas/v4",
-    "api_key": "",
+    "model": "grok-3-mini",
+    "_model": "qwen3-235b-a22b",
+    "api_url": "https://api.zhizengzeng.com/v1",
+    "api_key": "sk-",
     "other_params": {
-      "temperature": 0.7,
-      "max_tokens": 4096
+      "temperature": 0.1,
+      "max_tokens": 4096,
+      "max_loop_iterations": 15,
+      "request_timeout": 60.0
     }
   },
   "mcpServers": {
     "k8s": {
+      "enable": false,
       "type": "sse",
-      "url": "http://10.227.104.51:32085/sse",
+      "url": "http://127.0.0.1:32085/sse",
       "command": null,
       "args": [],
       "env": {}
     },
     "lcu": {
+      "enable": false,
       "type": "sse",
       "url": "http://127.0.0.1:8012/sse",
       "command": null,
@@ -25,6 +30,7 @@
       "env": {}
     },
     "weather": {
+      "enable": false,
       "type": "sse",
       "url": "http://127.0.0.1:8010/sse",
       "command": null,
@@ -32,14 +38,54 @@
       "env": {}
     },
     "tavily": {
+      "enable": false,
       "type": "stdio",
       "url": "",
       "command": "npx",
       "args": ["-y","tavily-mcp@0.1.4"],
       "env": {
-        "TAVILY_API_KEY": ""
+        "TAVILY_API_KEY": "tvly-dev-"
+      }
+    },
+    "gaode": {
+      "enable": true,
+      "type": "sse",
+      "url": "https://mcp.amap.com/sse?key=",
+      "command": "",
+      "args": [],
+      "env": {}
+    },
+    "Jira": {
+      "enable": false,
+      "type": "stdio",
+      "url": "",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "CONFLUENCE_URL",
+        "-e",
+        "CONFLUENCE_USERNAME",
+        "-e",
+        "CONFLUENCE_API_TOKEN",
+        "-e",
+        "JIRA_URL",
+        "-e",
+        "JIRA_USERNAME",
+        "-e",
+        "JIRA_API_TOKEN",
+        "ghcr.io/sooperset/mcp-atlassian:latest"
+      ],
+      "env": {
+        "CONFLUENCE_URL": "https://your-company.atlassian.net/wiki",
+        "CONFLUENCE_USERNAME": "your.email@company.com",
+        "CONFLUENCE_API_TOKEN": "your_confluence_api_token",
+        "JIRA_URL": "https://your-company.atlassian.net",
+        "JIRA_USERNAME": "your.email@company.com",
+        "JIRA_API_TOKEN": "your_jira_api_token"
       }
     }
-  },
-  "default_server": "k8s"
+  }
 }

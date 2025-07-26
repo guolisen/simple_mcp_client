@@ -24,13 +24,13 @@ class ServerConfig(BaseModel):
     command: Optional[str] = None  # Required for stdio servers
     args: List[str] = Field(default_factory=list)  # Used for stdio servers
     env: Dict[str, str] = Field(default_factory=dict)  # Environment variables
+    enable: bool = True  # Whether to connect to this server at startup
 
 
 class ClientConfig(BaseModel):
     """Main configuration for the MCP client."""
     llm: LLMConfig
     mcpServers: Dict[str, ServerConfig]
-    default_server: Optional[str] = None
 
 
 class Configuration:
@@ -81,9 +81,9 @@ class Configuration:
                     "k8s": ServerConfig(
                         type="sse",
                         url="http://192.168.182.128:8000/sse",
+                        enable=True,
                     )
                 },
-                default_server="k8s",
             )
             self.save_config(config)
             return config
