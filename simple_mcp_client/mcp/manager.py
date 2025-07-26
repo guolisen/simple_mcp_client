@@ -1,6 +1,7 @@
 """Server manager for handling multiple MCP servers."""
 import logging
 from typing import Dict, List, Optional, Any
+from datetime import datetime
 
 from ..config import Configuration, ServerConfig
 from .server import MCPServer
@@ -221,7 +222,8 @@ class ServerManager:
         tool_name: str, 
         arguments: Dict[str, Any],
         server_name: Optional[str] = None,
-        retries: int = 2
+        retries: int = 2,
+        print_formatting: bool = True
     ) -> Any:
         """Execute a tool on a server.
         
@@ -231,6 +233,7 @@ class ServerManager:
             server_name: The name of the server to execute the tool on.
                         If not provided, will try to find a server with the tool.
             retries: Number of retries for the operation.
+            print_formatting: Whether to print formatted tool call and result.
             
         Returns:
             The result of the tool execution.
@@ -239,21 +242,57 @@ class ServerManager:
             MCPServerError: If no server with the tool is found or connected.
             ToolExecutionError: If the tool execution fails.
         """
+        # Find the appropriate server
         if server_name:
             server = self.get_server(server_name)
             if not server:
                 raise MCPServerError(f"Server {server_name} not found")
-            
+        else:
+            # Try to find a server with the tool
+            server = self.get_server_with_tool(tool_name)
+            if not server:
+                raise MCPServerError(f"No connected server found with tool {tool_name}")
+        
+        # Record start time
+        start_time = datetime.now()
+        
+        # Print formatted tool call if requested
+        if print_formatting:
+            # Import here to avoid circular imports
+            from ..console.tool_formatter import default_formatter
+            default_formatter.print_tool_call(server.name, tool_name, arguments, start_time)
+        
+        try:
             # The server.execute_tool method will handle reconnection if needed
-            return await server.execute_tool(tool_name, arguments, retries=retries)
-        
-        # Try to find a server with the tool
-        server = self.get_server_with_tool(tool_name)
-        if not server:
-            raise MCPServerError(f"No connected server found with tool {tool_name}")
-        
-        # The server.execute_tool method will handle reconnection if needed
-        return await server.execute_tool(tool_name, arguments, retries=retries)
+            result = await server.execute_tool(tool_name, arguments, retries=retries)
+            
+            # Record end time
+            end_time = datetime.now()
+            
+            # Print formatted tool result if requested
+            if print_formatting:
+                # Import here to avoid circular imports
+                from ..console.tool_formatter import default_formatter
+                default_formatter.print_tool_result(
+                    server.name, tool_name, result, start_time, end_time, success=True
+                )
+            
+            return result
+            
+        except Exception as e:
+            # Record end time for error case
+            end_time = datetime.now()
+            
+            # Print formatted error result if requested
+            if print_formatting:
+                # Import here to avoid circular imports
+                from ..console.tool_formatter import default_formatter
+                default_formatter.print_tool_result(
+                    server.name, tool_name, str(e), start_time, end_time, success=False
+                )
+            
+            # Re-raise the exception
+            raise
     
     async def get_resource(
         self, 

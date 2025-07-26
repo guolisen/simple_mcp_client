@@ -27,10 +27,25 @@ class ServerConfig(BaseModel):
     enable: bool = True  # Whether to connect to this server at startup
 
 
+class ToolFormattingConfig(BaseModel):
+    """Configuration for MCP tool call formatting."""
+    enabled: bool = True  # Whether to enable tool call formatting
+    color: bool = True  # Whether to use colors in formatting
+    compact: bool = False  # Whether to use compact formatting
+    max_depth: int = 3  # Maximum depth for nested objects
+    truncate_length: int = 100  # Maximum length for string values
+
+
+class ConsoleConfig(BaseModel):
+    """Configuration for console interface."""
+    tool_formatting: ToolFormattingConfig = Field(default_factory=ToolFormattingConfig)
+
+
 class ClientConfig(BaseModel):
     """Main configuration for the MCP client."""
     llm: LLMConfig
     mcpServers: Dict[str, ServerConfig]
+    console: ConsoleConfig = Field(default_factory=ConsoleConfig)
 
 
 class Configuration:
@@ -84,6 +99,15 @@ class Configuration:
                         enable=True,
                     )
                 },
+                console=ConsoleConfig(
+                    tool_formatting=ToolFormattingConfig(
+                        enabled=True,
+                        color=True,
+                        compact=False,
+                        max_depth=3,
+                        truncate_length=100
+                    )
+                )
             )
             self.save_config(config)
             return config

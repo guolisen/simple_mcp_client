@@ -2,6 +2,7 @@
 import logging
 from typing import Dict, List, Optional, Any
 import json
+from datetime import datetime
 
 from rich.console import Console
 from rich.panel import Panel
@@ -12,6 +13,7 @@ from ..mcp.manager import ServerManager
 from ..mcp.langchain_adapter import MCPLangChainAdapter
 from ..llm.react_agent import ReactAgentProvider
 from ..prompt.system import generate_system_prompt, generate_tool_format
+from .tool_formatter import format_tool_call_markdown, format_tool_result_markdown
 
 
 async def initialize_mcp_client(server_manager: ServerManager) -> MCPLangChainAdapter:
@@ -97,36 +99,30 @@ async def create_react_agent(config: Configuration, mcp_adapter: MCPLangChainAda
     return react_agent
 
 
-def format_tool_execution_display(tool_name: str, arguments: Dict[str, Any], result: Any) -> str:
+def format_tool_execution_display(tool_name: str, arguments: Dict[str, Any], result: Any, 
+                                server_name: str = "unknown") -> str:
     """Format tool execution for display in the console.
     
     Args:
         tool_name: Name of the executed tool.
         arguments: Arguments passed to the tool.
         result: Result returned by the tool.
+        server_name: Name of the server that executed the tool.
         
     Returns:
         Formatted string for display.
     """
-    display_parts = []
+    # Get current time for timestamps
+    start_time = datetime.now()
     
-    # Tool name and arguments
-    display_parts.append(f"**Tool:** {tool_name}")
+    # Format tool call
+    call_markdown = format_tool_call_markdown(server_name, tool_name, arguments, start_time)
     
-    if arguments:
-        args_str = json.dumps(arguments, indent=2)
-        display_parts.append(f"**Arguments:**\n```json\n{args_str}\n```")
+    # Format tool result
+    result_markdown = format_tool_result_markdown(server_name, tool_name, result, start_time, 
+                                               datetime.now(), success=True)
     
-    # Result
-    if isinstance(result, str):
-        display_parts.append(f"**Result:**\n{result}")
-    elif isinstance(result, dict) or isinstance(result, list):
-        result_str = json.dumps(result, indent=2)
-        display_parts.append(f"**Result:**\n```json\n{result_str}\n```")
-    else:
-        display_parts.append(f"**Result:**\n{str(result)}")
-    
-    return "\n\n".join(display_parts)
+    return f"{call_markdown}\n\n{result_markdown}"
 
 
 def display_chat_header(console: Console, react_agent: ReactAgentProvider, mcp_adapter: MCPLangChainAdapter) -> None:
@@ -189,9 +185,17 @@ def parse_streaming_chunk(chunk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             
             elif "tools" in chunk:
                 # Tool execution chunk
+                tool_data = chunk["tools"]
+                
+                # Extract server name if available
+                server_name = "unknown"
+                if isinstance(tool_data, dict) and "server_name" in tool_data:
+                    server_name = tool_data["server_name"]
+                
                 return {
                     "type": "tool_execution",
-                    "data": chunk["tools"]
+                    "data": tool_data,
+                    "server_name": server_name
                 }
             
             # Handle data field for non-standard chunks

@@ -12,15 +12,17 @@
       "request_timeout": 60.0
     }
   },
-  "mcpServers": {
-    "k8s": {
-      "enable": false,
-      "type": "sse",
-      "url": "http://127.0.0.1:32085/sse",
-      "command": null,
+  "console": {
+    "tool_formatting": {
+      "enabled": true,
+      "color": true,
+      "compact": false,
+      "max_depth": 3,
       "args": [],
       "env": {}
-    },
+    }
+  },
+  "mcpServers": {
     "lcu": {
       "enable": false,
       "type": "sse",

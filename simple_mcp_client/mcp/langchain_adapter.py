@@ -6,13 +6,16 @@ import asyncio
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from ..config import ServerConfig
-from .manager import ServerManager
+# Import ServerManager type hint only for type annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .manager import ServerManager
 
 
 class MCPLangChainAdapter:
     """Adapter to bridge existing MCP servers with LangChain MCP adapters."""
     
-    def __init__(self, server_manager: ServerManager):
+    def __init__(self, server_manager: "ServerManager"):
         """Initialize the adapter.
         
         Args:

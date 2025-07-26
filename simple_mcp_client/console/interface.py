@@ -777,28 +777,17 @@ class ConsoleInterface:
             return
         
         try:
-            # Use a new context for the status indicator to ensure it's properly managed
-            status_context = self.console.status(f"[bold green]Executing {tool_name} on {server_name}...[/bold green]")
-            status_context.__enter__()
+            # Execute the tool with nice formatting
+            # The formatting will be handled by the ServerManager.execute_tool method
+            result = await self.server_manager.execute_tool(
+                tool_name=tool_name,
+                arguments=tool_args,
+                server_name=server_name,
+                print_formatting=True
+            )
             
-            try:
-                result = await server.execute_tool(tool_name, tool_args)
-                # Exit the status context before printing results
-                status_context.__exit__(None, None, None)
-                
-                # Pretty print the result
-                if isinstance(result, str):
-                    self.console.print(Panel(result, title=f"Result: {tool_name}", border_style="green"))
-                else:
-                    formatted_result = self._serialize_complex_object(result)
-                    self.console.print(Panel(formatted_result, title=f"Result: {tool_name}", border_style="green"))
-            except Exception as e:
-                # Make sure status is cleared even on error
-                status_context.__exit__(None, None, None)
-                self.console.print(f"[red]Error executing tool: {str(e)}[/red]")
-        except Exception as outer_e:
-            # Handle any issues with the status context itself
-            self.console.print(f"[red]Error setting up execution environment: {str(outer_e)}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]Error executing tool: {str(e)}[/red]")
     
     async def _cmd_chat(self, args: str) -> None:
         """Handle the chat command with ReAct agent integration.

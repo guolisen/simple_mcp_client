@@ -10,6 +10,7 @@ from rich.console import Console
 
 from simple_mcp_client.config import Configuration
 from simple_mcp_client.console import ConsoleInterface
+from simple_mcp_client.console.tool_formatter import update_formatter_config
 from simple_mcp_client.mcp import ServerManager
 
 #os.environ['LANGCHAIN_TRACING_V2'] = "true"
@@ -82,6 +83,11 @@ async def run_client() -> None:
     try:
         # Load configuration
         config = Configuration()
+        
+        # Initialize tool formatter with configuration
+        if hasattr(config.config, "console") and hasattr(config.config.console, "tool_formatting"):
+            update_formatter_config(config.config.console.tool_formatting)
+            logging.info("Tool formatter configured from settings")
         
         # Create server manager
         server_manager = ServerManager(config)
