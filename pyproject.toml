@@ -34,6 +34,10 @@ dependencies = [
     "urllib3>=2.3.0",
     "requests-toolbelt>=1.0.0",
     "build>=1.2.2.post1",
+    "langchain-mcp-adapters>=0.1.9",
+    "langgraph>=0.5.4",
+    "langchain>=0.3.27",
+    "langchain-openai>=0.3.28",
 ]
 
 [project.scripts]

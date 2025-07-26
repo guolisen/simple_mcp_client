@@ -83,8 +83,8 @@ class MCPLangChainAdapter:
             
             # Initialize MultiServerMCPClient
             self.langchain_client = MultiServerMCPClient(
-                langchain_config,
-                useStandardContentBlocks=use_standard_content_blocks
+                langchain_config
+                #useStandardContentBlocks=use_standard_content_blocks
             )
             
             logging.info(f"Initialized LangChain MCP client with {len(langchain_config)} servers")

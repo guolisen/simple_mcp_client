@@ -8,6 +8,7 @@ from langchain.chat_models import init_chat_model
 from langgraph.graph import StateGraph, MessagesState, START
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, SystemMessage, AIMessage
 
 from ..config import Configuration
 from ..mcp.langchain_adapter import MCPLangChainAdapter
@@ -71,9 +72,9 @@ class ReactAgentProvider:
             """Call the language model with bound tools."""
             # Add system message if not present
             messages = state["messages"]
-            if not messages or messages[0].get("role") != "system":
+            if not messages or not isinstance(messages[0], SystemMessage):
                 if self.system_message:
-                    system_msg = {"role": "system", "content": self.system_message}
+                    system_msg = SystemMessage(content=self.system_message)
                     messages = [system_msg] + messages
             
             # Bind tools to the model and invoke
@@ -139,12 +140,19 @@ class ReactAgentProvider:
             # Extract the final message
             final_message = response["messages"][-1]
             
-            if hasattr(final_message, "content"):
-                return final_message.content
-            elif isinstance(final_message, dict) and "content" in final_message:
-                return final_message["content"]
+            # Handle different types of message objects safely
+            if isinstance(final_message, dict):
+                # Dictionary access
+                if "content" in final_message:
+                    return final_message["content"]
+                else:
+                    return str(final_message)
             else:
-                return str(final_message)
+                # Object attribute access - using hasattr for safety
+                if hasattr(final_message, "content"):
+                    return final_message.content
+                else:
+                    return str(final_message)
                 
         except asyncio.TimeoutError:
             raise RuntimeError(f"ReAct agent response timed out after {self.timeout} seconds")
@@ -181,9 +189,14 @@ class ReactAgentProvider:
                 configurable={"timeout": self.timeout}
             )
             
-            # Stream the graph execution
+            # Stream the graph execution with proper chunk handling
             async for chunk in self.graph.astream(graph_input, config=config):
-                yield chunk
+                # Process the chunk to safely handle different types of objects
+                if isinstance(chunk, dict):
+                    yield chunk
+                else:
+                    # Convert non-dict objects to a safe format
+                    yield {"data": str(chunk)}
                 
         except asyncio.TimeoutError:
             raise RuntimeError(f"ReAct agent response timed out after {self.timeout} seconds")

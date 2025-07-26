@@ -1,9 +1,9 @@
 {
   "llm": {
     "provider": "openai",
-    "model": "GLM-4-Flash",
-    "api_url": "https://open.bigmodel.cn/api/paas/v4",
-    "api_key": "",
+    "model": "grok-3-mini",
+    "api_url": "https://api.zhizengzeng.com/v1",
+    "api_key": "sk-zk2199591d79521bad0cdbbd3e65202b8876837fdad61f02",
     "other_params": {
       "temperature": 0.7,
       "max_tokens": 4096
@@ -12,7 +12,7 @@
   "mcpServers": {
     "k8s": {
       "type": "sse",
-      "url": "http://10.227.104.51:32085/sse",
+      "url": "http://127.0.0.1:32085/sse",
       "command": null,
       "args": [],
       "env": {}
@@ -37,9 +37,16 @@
       "command": "npx",
       "args": ["-y","tavily-mcp@0.1.4"],
       "env": {
-        "TAVILY_API_KEY": ""
+        "TAVILY_API_KEY": "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"
       }
+    },
+    "gaode": {
+      "type": "sse",
+      "url": "https://mcp.amap.com/sse?key=ed40afb4730ce2c8f5523c2fceca08be",
+      "command": "",
+      "args": [],
+      "env": {}
     }
   },
-  "default_server": "k8s"
+  "default_server": "tavily"
 }

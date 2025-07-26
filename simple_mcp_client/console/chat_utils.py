@@ -175,7 +175,13 @@ def parse_streaming_chunk(chunk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 messages = chunk["call_model"].get("messages", [])
                 if messages:
                     last_message = messages[-1]
-                    if hasattr(last_message, "content"):
+                    # Handle both dict and object messages
+                    if isinstance(last_message, dict) and "content" in last_message:
+                        return {
+                            "type": "model_response",
+                            "content": last_message["content"]
+                        }
+                    elif hasattr(last_message, "content"):
                         return {
                             "type": "model_response",
                             "content": last_message.content
@@ -186,6 +192,13 @@ def parse_streaming_chunk(chunk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 return {
                     "type": "tool_execution",
                     "data": chunk["tools"]
+                }
+            
+            # Handle data field for non-standard chunks
+            elif "data" in chunk:
+                return {
+                    "type": "other",
+                    "data": chunk["data"]
                 }
         
         return None
@@ -211,8 +224,7 @@ async def run_chat_loop(console: Console, react_agent: ReactAgentProvider,
         try:
             # Get user input
             user_input = await session.prompt_async(
-                "You: ",
-                style={"prompt": "ansicyan bold"}
+                "You: "
             )
             
             user_input = user_input.strip()
