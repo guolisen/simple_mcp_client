@@ -1,0 +1,41 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ "*" ]  # Run on push to any branch
+  pull_request:
+    branches: [ "main" ]  # Run on PRs targeting main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.8", "3.9", "3.10", "3.11", "3.12" ]  # Test across multiple Python versions
+      fail-fast: false  # Continue testing other versions even if one fails
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        run: |
+          pip install uv==0.4.18  # Pin to a specific version for reproducibility
+
+      - name: Create and activate virtual environment
+        run: |
+          uv venv
+          echo "VIRTUAL_ENV=.venv" >> $GITHUB_ENV
+          echo ".venv/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          uv sync
+
+      - name: Run tests
+        run: |
+          uv run python -m pytest
