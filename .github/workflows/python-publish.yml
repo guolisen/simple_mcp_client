@@ -51,7 +51,7 @@ jobs:
       id-token: write
     environment:
       name: pypi
-      url: https://pypi.org/p/simple-mcp-client  # Replace YOURPROJECT with your actual project name
+      url: https://pypi.org/project/simple-mcp-client  # Replace YOURPROJECT with your actual project name
     steps:
       - name: Download distributions
         uses: actions/download-artifact@v4
