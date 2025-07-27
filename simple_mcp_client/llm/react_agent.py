@@ -233,6 +233,17 @@ class ReactAgentProvider:
             
             # Stream the graph execution with proper chunk handling
             async for chunk in self.graph.astream(graph_input, config=config):
+                # Add debug logging for chunk structure
+                if "call_model" in chunk:
+                    # Log the structure of call_model chunks
+                    messages = chunk["call_model"].get("messages", [])
+                    if messages and len(messages) > 0:
+                        last_message = messages[-1]
+                        if hasattr(last_message, "additional_kwargs") and hasattr(last_message.additional_kwargs, "get"):
+                            tool_calls = last_message.additional_kwargs.get("tool_calls", [])
+                            if tool_calls:
+                                logging.debug(f"Found tool calls in chunk: {tool_calls}")
+                
                 # Process the chunk to safely handle different types of objects
                 if isinstance(chunk, dict):
                     yield chunk

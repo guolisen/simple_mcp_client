@@ -19,5 +19,18 @@
       "env": {}
     }
   },
+  "console": {
+    "tool_formatting": {
+      "enabled": true,
+      "color": true,
+      "compact": false,
+      "max_depth": 3,
+      "truncate_length": 100,
+      "syntax_highlighting": true,
+      "align_columns": true,
+      "show_icons": true,
+      "color_scheme": "default"
+    }
+  },
   "default_server": "k8s"
 }

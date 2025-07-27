@@ -34,6 +34,10 @@ class ToolFormattingConfig(BaseModel):
     compact: bool = False  # Whether to use compact formatting
     max_depth: int = 3  # Maximum depth for nested objects
     truncate_length: int = 100  # Maximum length for string values
+    syntax_highlighting: bool = True  # Whether to use syntax highlighting for JSON
+    align_columns: bool = True  # Whether to align columns in tables
+    show_icons: bool = True  # Whether to show icons for status
+    color_scheme: str = "default"  # Color scheme to use (default, dark, light, monochrome)
 
 
 class ConsoleConfig(BaseModel):

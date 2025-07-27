@@ -171,7 +171,56 @@ def parse_streaming_chunk(chunk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 messages = chunk["call_model"].get("messages", [])
                 if messages:
                     last_message = messages[-1]
-                    # Handle both dict and object messages
+                    
+                    # Check for tool calls in AIMessage
+                    tool_calls = None
+                    if isinstance(last_message, dict):
+                        # Check for tool_calls in additional_kwargs
+                        additional_kwargs = last_message.get("additional_kwargs", {})
+                        tool_calls = additional_kwargs.get("tool_calls", [])
+                        
+                        # Also check for tool_calls directly in the message
+                        if not tool_calls and "tool_calls" in last_message:
+                            tool_calls = last_message["tool_calls"]
+                            
+                    elif hasattr(last_message, "additional_kwargs") and hasattr(last_message.additional_kwargs, "get"):
+                        # Object with additional_kwargs attribute
+                        tool_calls = last_message.additional_kwargs.get("tool_calls", [])
+                    
+                    # If we found tool calls, process them
+                    if tool_calls:
+                        # Extract the first tool call (usually there's just one)
+                        tool_call = tool_calls[0]
+                        
+                        # Log the tool call for debugging
+                        logging.debug(f"Found tool call in AIMessage: {tool_call}")
+                        
+                        # Extract function info
+                        function_info = tool_call.get("function", {})
+                        if isinstance(function_info, dict):
+                            tool_name = function_info.get("name", "unknown_tool")
+                            args_str = function_info.get("arguments", "{}")
+                            
+                            # Parse arguments string to dict
+                            try:
+                                args = json.loads(args_str, strict=False)
+                            except json.JSONDecodeError:
+                                args = {"raw_args": args_str}
+                                logging.warning(f"Failed to parse tool arguments as JSON: {args_str}")
+                                
+                            # Create tool call data
+                            logging.info(f"Extracted tool call: {tool_name} with args: {args}")
+                            return {
+                                "type": "tool_call",
+                                "data": {
+                                    "name": tool_name,
+                                    "args": args,
+                                    "id": tool_call.get("id", "")
+                                },
+                                "server_name": "unknown"  # Server name will be determined later
+                            }
+                    
+                    # If no tool calls, process as regular model response
                     if isinstance(last_message, dict) and "content" in last_message:
                         return {
                             "type": "model_response",
@@ -224,6 +273,9 @@ async def run_chat_loop(console: Console, react_agent: ReactAgentProvider,
     """
     messages = []
     
+    # Import formatter here to avoid circular imports
+    from .tool_formatter import default_formatter
+    
     while True:
         try:
             # Get user input
@@ -242,12 +294,118 @@ async def run_chat_loop(console: Console, react_agent: ReactAgentProvider,
             # Add user message to conversation
             messages.append({"role": "user", "content": user_input})
             
-            # Get response from ReAct agent
+            # Get response from ReAct agent using streaming API
             try:
-                with console.status("[bold green]Agent thinking and acting...[/bold green]"):
-                    response = await react_agent.get_response(messages)
+                with console.status("[bold green]Agent thinking and acting...[/bold green]") as status:
+                    # Use streaming API to intercept tool calls
+                    final_response_parts = []
+                    current_tool_call = None
+                    tool_call_start_time = None
+                    
+                    async for chunk in react_agent.stream_response(messages):
+                        # Parse the chunk
+                        parsed_chunk = parse_streaming_chunk(chunk)
+                        
+                        if parsed_chunk:
+                            if parsed_chunk["type"] == "model_response":
+                                # Accumulate model response parts
+                                content = parsed_chunk["content"]
+                                if content:
+                                    final_response_parts.append(content)
+                            
+                            elif parsed_chunk["type"] == "tool_call":
+                                # Extract tool data for tool call
+                                tool_data = parsed_chunk["data"]
+                                server_name = parsed_chunk.get("server_name", "unknown")
+                                
+                                # Extract tool information
+                                tool_name = tool_data["name"]
+                                tool_args = tool_data["args"]
+                                tool_call_start_time = datetime.now()
+                                
+                                # Log the tool call
+                                logging.info(f"Processing tool call: {tool_name} with args: {tool_args}")
+                                
+                                # Temporarily clear the status to show tool call
+                                status.stop()
+                                
+                                # Format and display tool call
+                                default_formatter.print_tool_call(
+                                    server_name, tool_name, tool_args, tool_call_start_time
+                                )
+                                
+                                # Store current tool call info
+                                current_tool_call = {
+                                    "server_name": server_name,
+                                    "tool_name": tool_name,
+                                    "start_time": tool_call_start_time,
+                                    "id": tool_data.get("id", "")
+                                }
+                                
+                                # Resume the status
+                                status.start()
+                                
+                            elif parsed_chunk["type"] == "tool_execution":
+                                # Extract tool data
+                                tool_data = parsed_chunk["data"]
+                                server_name = parsed_chunk.get("server_name", "unknown")
+                                
+                                # Check if this is a tool call or tool result
+                                if "name" in tool_data and "args" in tool_data:
+                                    # Tool call
+                                    tool_name = tool_data["name"]
+                                    tool_args = tool_data["args"]
+                                    tool_call_start_time = datetime.now()
+                                    
+                                    # Temporarily clear the status to show tool call
+                                    status.stop()
+                                    
+                                    # Format and display tool call
+                                    default_formatter.print_tool_call(
+                                        server_name, tool_name, tool_args, tool_call_start_time
+                                    )
+                                    
+                                    # Store current tool call info
+                                    current_tool_call = {
+                                        "server_name": server_name,
+                                        "tool_name": tool_name,
+                                        "start_time": tool_call_start_time
+                                    }
+                                    
+                                    # Resume the status
+                                    status.start()
+                                    
+                                elif "output" in tool_data and current_tool_call:
+                                    # Tool result
+                                    tool_result = tool_data["output"]
+                                    tool_end_time = datetime.now()
+                                    
+                                    # Log the tool result
+                                    logging.info(f"Processing tool result for {current_tool_call['tool_name']}: {tool_result}")
+                                    
+                                    # Temporarily clear the status to show tool result
+                                    status.stop()
+                                    
+                                    # Format and display tool result
+                                    default_formatter.print_tool_result(
+                                        current_tool_call["server_name"],
+                                        current_tool_call["tool_name"],
+                                        tool_result,
+                                        current_tool_call["start_time"],
+                                        tool_end_time,
+                                        success=True
+                                    )
+                                    
+                                    # Reset current tool call
+                                    current_tool_call = None
+                                    
+                                    # Resume the status
+                                    status.start()
+                    
+                    # Combine all response parts into the final response
+                    response = "".join(final_response_parts)
                 
-                # Display the response
+                # Display the final response
                 console.print(Panel(
                     Markdown(response),
                     title="Assistant",

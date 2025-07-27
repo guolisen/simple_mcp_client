@@ -1,8 +1,8 @@
 {
   "llm": {
     "provider": "openai",
-    "model": "grok-3-mini",
-    "_model": "qwen3-235b-a22b",
+    "_model": "grok-3-mini",
+    "model": "qwen3-235b-a22b",
     "api_url": "https://api.zhizengzeng.com/v1",
     "api_key": "sk-",
     "other_params": {
@@ -18,8 +18,11 @@
       "color": true,
       "compact": false,
       "max_depth": 3,
-      "args": [],
-      "env": {}
+      "truncate_length": 100,
+      "syntax_highlighting": true,
+      "align_columns": true,
+      "show_icons": true,
+      "color_scheme": "light"
     }
   },
   "mcpServers": {

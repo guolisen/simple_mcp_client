@@ -187,8 +187,9 @@ class ConsoleInterface:
                 "arg_completer": self._complete_connected_server_names,
             },
             "execute": {
-                "description": "Execute a tool",
+                "description": "Execute a tool or get help for a tool",
                 "handler": self._cmd_execute,
+                "subcommands": ["help"],
             },
             "get-resource": {
                 "description": "Get a resource from an MCP server",
@@ -722,6 +723,211 @@ class ConsoleInterface:
         
         self.console.print(table)
     
+    def _format_tool_help(self, tool, server_name: str) -> None:
+        """Format and display help information for a tool.
+        
+        Args:
+            tool: The Tool object to display help for.
+            server_name: The name of the server the tool belongs to.
+        """
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich.text import Text
+        from rich.box import ROUNDED
+        from rich import box
+        
+        # Create a table for the tool info
+        table = Table(
+            box=ROUNDED, 
+            show_header=False, 
+            show_edge=False, 
+            pad_edge=False,
+            width=self.console.width - 4  # Account for panel borders
+        )
+        
+        # Add columns
+        table.add_column("Key", style="bold cyan", width=15, justify="right")
+        table.add_column("Value", style="white", ratio=3)
+        
+        # Add server and tool info
+        table.add_row(
+            Text("Server", style="bold cyan"), 
+            Text(server_name, style="bright_green bold")
+        )
+        table.add_row(
+            Text("Tool", style="bold cyan"), 
+            Text(tool.name, style="bright_yellow bold")
+        )
+        table.add_row(
+            Text("Description", style="bold cyan"),
+            Text(tool.description, style="white")
+        )
+        
+        # Add horizontal separator
+        separator = Text("─" * (self.console.width - 8), style="dim")
+        table.add_row("", separator)
+        
+        # Add parameters header
+        table.add_row(
+            Text("Parameters", style="bold magenta underline"),
+            ""
+        )
+        
+        # Get the input schema properties
+        properties = tool.input_schema.get("properties", {})
+        required = tool.input_schema.get("required", [])
+        
+        if not properties:
+            table.add_row("", Text("No parameters required", style="dim italic"))
+        else:
+            # Create a nested table for parameters
+            params_table = Table(
+                box=box.SIMPLE,
+                show_header=True,
+                show_edge=False,
+                pad_edge=False
+            )
+            
+            params_table.add_column("Parameter", style="cyan")
+            params_table.add_column("Type", style="green")
+            params_table.add_column("Required", style="yellow")
+            params_table.add_column("Description", style="white")
+            
+            for param_name, param_info in properties.items():
+                param_type = param_info.get("type", "any")
+                is_required = param_name in required
+                required_text = "Yes" if is_required else "No"
+                required_style = "bright_green bold" if is_required else "dim"
+                description = param_info.get("description", "No description available")
+                
+                params_table.add_row(
+                    param_name,
+                    param_type,
+                    Text(required_text, style=required_style),
+                    description
+                )
+            
+            table.add_row("", params_table)
+        
+        # Add horizontal separator
+        table.add_row("", separator)
+        
+        # Add example usage header
+        table.add_row(
+            Text("Example Usage", style="bold magenta underline"),
+            ""
+        )
+        
+        # Create example command
+        example_cmd = f"execute {server_name} {tool.name}"
+        
+        # Add required parameters to example
+        example_params = []
+        for param_name in required:
+            param_info = properties.get(param_name, {})
+            param_type = param_info.get("type", "string")
+            
+            # Create an example value based on type
+            example_value = self._get_example_value(param_type, param_name, param_info)
+            example_params.append(f"{param_name}={example_value}")
+        
+        # Add a couple of optional parameters as examples if there are any
+        optional_params = [p for p in properties if p not in required]
+        for param_name in optional_params[:2]:  # Add up to 2 optional params
+            param_info = properties.get(param_name, {})
+            param_type = param_info.get("type", "string")
+            
+            # Create an example value based on type
+            example_value = self._get_example_value(param_type, param_name, param_info)
+            example_params.append(f"{param_name}={example_value}")
+        
+        if example_params:
+            example_cmd += " " + " ".join(example_params)
+            
+        table.add_row("", Text(example_cmd, style="bright_blue"))
+        
+        # Add a note about string parameters with spaces
+        table.add_row("", separator)
+        table.add_row(
+            Text("Note", style="bold magenta underline"),
+            ""
+        )
+        note_text = (
+            "For string parameters with spaces, enclose the value in quotes:\n"
+            "  param=\"value with spaces\"\n\n"
+            "Example: query=\"latest news about AI\""
+        )
+        table.add_row("", Text(note_text, style="yellow"))
+        
+        # Create panel with full width
+        panel = Panel(
+            table,
+            title=Text("Tool Help", style="bold white on blue"),
+            border_style="blue",
+            expand=True,
+            padding=(0, 1)
+        )
+        
+        self.console.print(panel)
+    
+    def _get_example_value(self, param_type: str, param_name: str, param_info: dict) -> str:
+        """Get an example value for a parameter based on its type.
+        
+        Args:
+            param_type: The type of the parameter.
+            param_name: The name of the parameter.
+            param_info: The parameter information.
+            
+        Returns:
+            An example value as a string.
+        """
+        if param_type == "string":
+            # Check for common parameter names to provide better examples
+            if "url" in param_name.lower():
+                return "https://example.com"
+            elif "email" in param_name.lower():
+                return "user@example.com"
+            elif "name" in param_name.lower():
+                return "example_name"
+            elif "path" in param_name.lower() or "file" in param_name.lower():
+                return "/path/to/file"
+            elif "date" in param_name.lower():
+                return "2025-07-27"
+            elif "time" in param_name.lower():
+                return "12:30:00"
+            elif "location" in param_name.lower() or "address" in param_name.lower():
+                return '"New York"'  # Quoted because it contains a space
+            elif "query" in param_name.lower() or "search" in param_name.lower() or "text" in param_name.lower():
+                return '"search terms with spaces"'  # Quoted because it likely contains spaces
+            elif "prompt" in param_name.lower() or "message" in param_name.lower() or "content" in param_name.lower():
+                return '"Example text with multiple words"'  # Quoted because it likely contains spaces
+            # Use enum values if available
+            elif "enum" in param_info:
+                enum_val = str(param_info["enum"][0])
+                # Quote enum values if they contain spaces
+                if " " in enum_val:
+                    return f'"{enum_val}"'
+                return enum_val
+            else:
+                return "example_string"
+        elif param_type == "number" or param_type == "integer":
+            if "minimum" in param_info and "maximum" in param_info:
+                return str((param_info["minimum"] + param_info["maximum"]) // 2)
+            elif "minimum" in param_info:
+                return str(param_info["minimum"])
+            elif "maximum" in param_info:
+                return str(param_info["maximum"])
+            else:
+                return "42" if param_type == "integer" else "3.14"
+        elif param_type == "boolean":
+            return "true"
+        elif param_type == "array":
+            return "item1"
+        elif param_type == "object":
+            return "key1=value1"
+        else:
+            return "example_value"
+    
     async def _cmd_execute(self, args: str) -> None:
         """Handle the execute command.
         
@@ -729,27 +935,65 @@ class ConsoleInterface:
             args: Command parameters.
             
         Format: execute <server_name> <tool_name> [arg1=val1 arg2=val2 ...]
+        Format: execute <server_name> <tool_name> help
+        
+        For string parameters with spaces, enclose the value in quotes:
+        Example: execute <server_name> <tool_name> query="search terms with spaces"
         """
         args = args.strip()
         parts = args.split()
         
         if len(parts) < 2:
             self.console.print("[red]Error: Invalid format. "
-                              "Use: execute <server_name> <tool_name> [arg1=val1 ...][/red]")
+                              "Use: execute <server_name> <tool_name> [arg1=val1 ...] or "
+                              "execute <server_name> <tool_name> help[/red]")
             return
         
         server_name = parts[0]
         tool_name = parts[1]
         
-        # Parse parameters
-        tool_args = {}
-        for arg in parts[2:]:
-            if "=" not in arg:
-                self.console.print(f"[red]Error: Invalid argument format: {arg}. "
-                                  "Use: key=value[/red]")
+        # Check if this is a help request
+        if len(parts) == 3 and parts[2].lower() == "help":
+            server = self.server_manager.get_server(server_name)
+            if not server:
+                self.console.print(f"[red]Error: Server '{server_name}' not found[/red]")
                 return
             
-            key, value = arg.split("=", 1)
+            if not server.is_connected:
+                self.console.print(f"[red]Error: Server '{server_name}' is not connected[/red]")
+                return
+            
+            tool = server.get_tool(tool_name)
+            if not tool:
+                self.console.print(f"[red]Error: Tool '{tool_name}' not found on server '{server_name}'[/red]")
+                return
+            
+            # Display help information for the tool
+            self._format_tool_help(tool, server_name)
+            return
+        
+        # Parse parameters with proper handling of quoted strings
+        tool_args = {}
+        
+        # Join the remaining parts back into a single string for proper parsing
+        args_str = ' '.join(parts[2:])
+        
+        # Use a regex pattern to match key=value pairs, handling quoted values
+        pattern = r'(\w+)=("(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[^\s]+)'
+        matches = re.findall(pattern, args_str)
+        
+        if not matches and args_str.strip():
+            # If we have args but no matches, there might be a syntax error
+            self.console.print("[red]Error: Could not parse arguments. "
+                              "Use format: key=value or key=\"value with spaces\"[/red]")
+            return
+        
+        for key, value in matches:
+            # Remove quotes from quoted values
+            if (value.startswith('"') and value.endswith('"')) or \
+               (value.startswith("'") and value.endswith("'")):
+                value = value[1:-1]
+            
             # Try to parse JSON-like values
             if value.lower() == "true":
                 value = True
