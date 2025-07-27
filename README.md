@@ -61,11 +61,11 @@ The chat command now displays a header with information about the agent, connect
 
 ### Chat Mode
 
-[Reserved for user-provided screenshots]
+![chat example](./docs/images/chat-example.png)
 
 ### Execute Mode
 
-[Reserved for user-provided screenshots]
+![execute_example](./docs/images/execute-example.png)
 
 ## Installation
 
