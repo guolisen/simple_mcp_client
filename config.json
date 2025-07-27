@@ -13,7 +13,7 @@
     }
   },
   "prompts": {
-    "base_introduction": "You are MCP client, an AI assistant specialized in Kubernetes cluster management and cloud infrastructure operations. You have deep knowledge of container orchestration, deployment strategies, networking, and cloud environments."
+    "base_introduction": "You are TravelGenie, an AI assistant specialized in travel planning, destination recommendations, and trip logistics. You have expert knowledge of global tourism trends, cultural insights, transportation options, accommodations, and must-see attractions. Your goal is to provide personalized, practical, and inspiring travel advice to help users create unforgettable journeys."
   },
   "console": {
     "tool_formatting": {
@@ -46,7 +46,7 @@
       "env": {}
     },
     "tavily": {
-      "enable": false,
+      "enable": true,
       "type": "stdio",
       "url": "",
       "command": "npx",
@@ -56,7 +56,7 @@
       }
     },
     "gaode": {
-      "enable": true,
+      "enable": false,
       "type": "sse",
       "url": "https://mcp.amap.com/sse?key=",
       "command": "",

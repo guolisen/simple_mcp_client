@@ -17,44 +17,55 @@ A simple command-line MCP (Model Context Protocol) client for testing MCP server
 - Chat mode with LLM-driven tool execution
 - Configurable via JSON configuration files
 
-## Notice:
-This client now supports multiple LLM providers including OpenAI, Ollama, DeepSeek, OpenRouter, and LiteLLM. With the addition of LiteLLM, you can access various models from providers like Anthropic, Google, Azure, and more through a unified interface.
+## ReAct Agent Integration
 
-For example, to use Zhipu AI's GLM-4-Flash model:
+This branch introduces a ReAct (Reasoning and Acting) agent that enhances the chat functionality:
 
-```JSON
-  "llm": {
-    "provider": "openai",
-    "model": "GLM-4-Flash",
-    "api_url": "https://open.bigmodel.cn/api/paas/v4",
-    "api_key": "",
-    "other_params": {
-      "temperature": 0.7,
-      "max_tokens": 4096
-    }
-  }
+- **Intelligent Tool Reasoning**: The ReAct agent uses reasoning to determine which tools to use and when, enabling better tool chaining and multi-step problem solving
+- **LangChain MCP Integration**: Seamless integration with LangChain's MultiServerMCPClient for improved tool management
+- **Enhanced Chat Experience**: Clear visualization of agent reasoning and tool execution processes
+- **Configurable Settings**: Customizable timeout and maximum iterations for agent operations
+
+### Enhanced Chat Command
+
+The `chat` command has been significantly improved with the ReAct agent integration:
+
+```bash
+chat
 ```
 
-Or to use Anthropic's Claude model via LiteLLM:
+Key enhancements to the chat command include:
 
-```JSON
-  "llm": {
-    "provider": "litellm",
-    "model": "anthropic/claude-3-opus-20240229",
-    "api_key": "",
-    "other_params": {
-      "temperature": 0.7,
-      "max_tokens": 4096
-    }
-  }
+- **LangGraph-powered reasoning**: Uses LangGraph's StateGraph to manage the agent's reasoning and tool execution flow
+- **Real-time tool execution display**: Shows tool calls and results as they happen, with formatted output
+- **Streaming responses**: Agent responses are streamed in real-time, providing immediate feedback
+- **Improved error handling**: Better handling of timeouts and errors during tool execution
+- **Context-aware conversations**: Maintains conversation context for more coherent multi-turn interactions
+- **Automatic tool discovery**: Automatically discovers and makes available tools from all connected MCP servers
+
+The chat command now displays a header with information about the agent, connected servers, and available tools:
+
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                Enhanced MCP Chat with ReAct Agent                                 ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ ReAct Agent: openai/gpt-4-turbo                                                                  │
+│ Connected Servers: k8s, weather                                                                  │
+│ Available Tools: 15                                                                              │
+│ Timeout: 60s                                                                                     │
+│                                                                                                  │
+│ The agent will use ReAct (Reasoning and Acting) to intelligently select and use tools.           │
+│ Type exit to return to command mode.                                                             │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## Example
+### Chat Mode
 
-### Ex 1:
-![example](./docs/images/mcp-client-weather.png)
-### Ex 2:
-![example](./docs/images/simple-mcp-client-ex2.png)
+[Reserved for user-provided screenshots]
+
+### Execute Mode
+
+[Reserved for user-provided screenshots]
 
 ## Installation
 
@@ -159,6 +170,59 @@ python -m simple_mcp_client.main
 - `exit`: Exit the program
 
 ## Command Examples
+
+### Execute Command
+
+The `execute` command runs a specific tool from an MCP server with provided arguments. The ReAct agent integration enhances this functionality by providing intelligent tool selection and reasoning in chat mode.
+
+Execute a tool from a specific server:
+```bash
+execute k8s get_pod namespace=default name=my-pod
+```
+
+Execute a tool with multiple arguments:
+```bash
+execute weather get_forecast city="San Francisco" days=5
+```
+
+Execute a tool with JSON arguments:
+```bash
+execute github create_issue owner=octocat repo=hello-world title="Found a bug" body="I'm having a problem with this." labels=["bug","help wanted"]
+```
+
+Get help information for a specific tool by using the `help` parameter:
+```bash
+execute tavily tavily-extract help
+```
+
+Output example for help:
+```
+╭─────────────────────────────────────────────────────────────────────────────── Tool Help ───────────────────────────────────────────────────────────────────────────────╮
+│           Server │ tavily                                                                                                                                               │
+│             Tool │ tavily-extract                                                                                                                                       │
+│      Description │ A powerful web content extraction tool that retrieves and processes raw content from specified URLs, ideal for data collection, content analysis,    │
+│                  │ and research tasks.                                                                                                                                  │
+│                  │ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────… │
+│       Parameters │                                                                                                                                                      │
+│                  │ Parameter        Type      Required   Description                                                                                                    │
+│                  │ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                  │ urls             array     Yes        List of URLs to extract content from                                                                           │
+│                  │ extract_depth    string    No         Depth of extraction - 'basic' or 'advanced', if usrls are linkedin use 'advanced' or if explicitly told to use │
+│                  │                                       advanced                                                                                                       │
+│                  │ include_images   boolean   No         Include a list of images extracted from the urls in the response                                               │
+│                  │ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────… │
+│    Example Usage │                                                                                                                                                      │
+│                  │ execute tavily tavily-extract urls=item1 extract_depth=basic include_images=true                                                                     │
+│                  │ ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────… │
+│             Note │                                                                                                                                                      │
+│                  │ For string parameters with spaces, enclose the value in quotes:                                                                                      │
+│                  │   param="value with spaces"                                                                                                                          │
+│                  │                                                                                                                                                      │
+│                  │ Example: query="latest news about AI"                                                                                                                │
+╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+```
+
+The output will be displayed in a formatted way, showing the tool name, arguments, and results.
 
 ### Resources Command
 
