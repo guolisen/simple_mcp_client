@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 
 class LLMConfig(BaseModel):
@@ -24,13 +24,45 @@ class ServerConfig(BaseModel):
     command: Optional[str] = None  # Required for stdio servers
     args: List[str] = Field(default_factory=list)  # Used for stdio servers
     env: Dict[str, str] = Field(default_factory=dict)  # Environment variables
+    enable: bool = True  # Whether to connect to this server at startup
+
+
+class ToolFormattingConfig(BaseModel):
+    """Configuration for MCP tool call formatting."""
+    enabled: bool = True  # Whether to enable tool call formatting
+    color: bool = True  # Whether to use colors in formatting
+    compact: bool = False  # Whether to use compact formatting
+    max_depth: int = 3  # Maximum depth for nested objects
+    truncate_length: Union[int, str] = 100  # Maximum length for string values or "all" for no truncation
+    syntax_highlighting: bool = True  # Whether to use syntax highlighting for JSON
+    align_columns: bool = True  # Whether to align columns in tables
+    show_icons: bool = True  # Whether to show icons for status
+    color_scheme: str = "default"  # Color scheme to use (default, dark, light, monochrome)
+    
+    @validator('truncate_length')
+    def validate_truncate_length(cls, v):
+        """Validate that truncate_length is either an integer or the string 'all'."""
+        if isinstance(v, str) and v.lower() != 'all':
+            raise ValueError('truncate_length must be either an integer or the string "all"')
+        return v
+
+
+class PromptConfig(BaseModel):
+    """Configuration for system prompts."""
+    base_introduction: Optional[str] = None  # Base introduction system prompt
+
+
+class ConsoleConfig(BaseModel):
+    """Configuration for console interface."""
+    tool_formatting: ToolFormattingConfig = Field(default_factory=ToolFormattingConfig)
 
 
 class ClientConfig(BaseModel):
     """Main configuration for the MCP client."""
     llm: LLMConfig
     mcpServers: Dict[str, ServerConfig]
-    default_server: Optional[str] = None
+    console: ConsoleConfig = Field(default_factory=ConsoleConfig)
+    prompts: PromptConfig = Field(default_factory=PromptConfig)
 
 
 class Configuration:
@@ -81,9 +113,18 @@ class Configuration:
                     "k8s": ServerConfig(
                         type="sse",
                         url="http://192.168.182.128:8000/sse",
+                        enable=True,
                     )
                 },
-                default_server="k8s",
+                console=ConsoleConfig(
+                    tool_formatting=ToolFormattingConfig(
+                        enabled=True,
+                        color=True,
+                        compact=False,
+                        max_depth=3,
+                        truncate_length=100
+                    )
+                )
             )
             self.save_config(config)
             return config

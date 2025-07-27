@@ -187,8 +187,9 @@ class ConsoleInterface:
                 "arg_completer": self._complete_connected_server_names,
             },
             "execute": {
-                "description": "Execute a tool",
+                "description": "Execute a tool or get help for a tool",
                 "handler": self._cmd_execute,
+                "subcommands": ["help"],
             },
             "get-resource": {
                 "description": "Get a resource from an MCP server",
@@ -298,29 +299,11 @@ class ConsoleInterface:
             self.console.print(f"[red]Error: Server '{server_name}' not found[/red]")
             return
         
-        with self.console.status(f"[bold green]Connecting to {server_name}...[/bold green]"):
-            success = await self.server_manager.connect_server(server_name)
+        # Import the display_server_connection_message function from main module
+        from ..main import display_server_connection_message
         
-        if success:
-            server = self.server_manager.get_server(server_name)
-            if not server:
-                self.console.print("[red]Error: Failed to get server reference[/red]")
-                return
-            
-            info = server.server_info
-            if info:
-                self.console.print(
-                    f"[green]Connected to {server_name} "
-                    f"({info.name} v{info.version})[/green]"
-                )
-            else:
-                self.console.print(f"[green]Connected to {server_name}[/green]")
-            
-            # Show available tools
-            if server.tools:
-                self.console.print(f"Available tools: {len(server.tools)}")
-        else:
-            self.console.print(f"[red]Failed to connect to {server_name}[/red]")
+        # Use the enhanced connection message display
+        await display_server_connection_message(self.console, self.server_manager, server_name)
     
     async def _cmd_disconnect(self, args: str) -> None:
         """Handle the disconnect command.
@@ -722,6 +705,211 @@ class ConsoleInterface:
         
         self.console.print(table)
     
+    def _format_tool_help(self, tool, server_name: str) -> None:
+        """Format and display help information for a tool.
+        
+        Args:
+            tool: The Tool object to display help for.
+            server_name: The name of the server the tool belongs to.
+        """
+        from rich.panel import Panel
+        from rich.table import Table
+        from rich.text import Text
+        from rich.box import ROUNDED
+        from rich import box
+        
+        # Create a table for the tool info
+        table = Table(
+            box=ROUNDED, 
+            show_header=False, 
+            show_edge=False, 
+            pad_edge=False,
+            width=self.console.width - 4  # Account for panel borders
+        )
+        
+        # Add columns
+        table.add_column("Key", style="bold cyan", width=15, justify="right")
+        table.add_column("Value", style="white", ratio=3)
+        
+        # Add server and tool info
+        table.add_row(
+            Text("Server", style="bold cyan"), 
+            Text(server_name, style="bright_green bold")
+        )
+        table.add_row(
+            Text("Tool", style="bold cyan"), 
+            Text(tool.name, style="bright_yellow bold")
+        )
+        table.add_row(
+            Text("Description", style="bold cyan"),
+            Text(tool.description, style="white")
+        )
+        
+        # Add horizontal separator
+        separator = Text("─" * (self.console.width - 8), style="dim")
+        table.add_row("", separator)
+        
+        # Add parameters header
+        table.add_row(
+            Text("Parameters", style="bold magenta underline"),
+            ""
+        )
+        
+        # Get the input schema properties
+        properties = tool.input_schema.get("properties", {})
+        required = tool.input_schema.get("required", [])
+        
+        if not properties:
+            table.add_row("", Text("No parameters required", style="dim italic"))
+        else:
+            # Create a nested table for parameters
+            params_table = Table(
+                box=box.SIMPLE,
+                show_header=True,
+                show_edge=False,
+                pad_edge=False
+            )
+            
+            params_table.add_column("Parameter", style="cyan")
+            params_table.add_column("Type", style="green")
+            params_table.add_column("Required", style="yellow")
+            params_table.add_column("Description", style="white")
+            
+            for param_name, param_info in properties.items():
+                param_type = param_info.get("type", "any")
+                is_required = param_name in required
+                required_text = "Yes" if is_required else "No"
+                required_style = "bright_green bold" if is_required else "dim"
+                description = param_info.get("description", "No description available")
+                
+                params_table.add_row(
+                    param_name,
+                    param_type,
+                    Text(required_text, style=required_style),
+                    description
+                )
+            
+            table.add_row("", params_table)
+        
+        # Add horizontal separator
+        table.add_row("", separator)
+        
+        # Add example usage header
+        table.add_row(
+            Text("Example Usage", style="bold magenta underline"),
+            ""
+        )
+        
+        # Create example command
+        example_cmd = f"execute {server_name} {tool.name}"
+        
+        # Add required parameters to example
+        example_params = []
+        for param_name in required:
+            param_info = properties.get(param_name, {})
+            param_type = param_info.get("type", "string")
+            
+            # Create an example value based on type
+            example_value = self._get_example_value(param_type, param_name, param_info)
+            example_params.append(f"{param_name}={example_value}")
+        
+        # Add a couple of optional parameters as examples if there are any
+        optional_params = [p for p in properties if p not in required]
+        for param_name in optional_params[:2]:  # Add up to 2 optional params
+            param_info = properties.get(param_name, {})
+            param_type = param_info.get("type", "string")
+            
+            # Create an example value based on type
+            example_value = self._get_example_value(param_type, param_name, param_info)
+            example_params.append(f"{param_name}={example_value}")
+        
+        if example_params:
+            example_cmd += " " + " ".join(example_params)
+            
+        table.add_row("", Text(example_cmd, style="bright_blue"))
+        
+        # Add a note about string parameters with spaces
+        table.add_row("", separator)
+        table.add_row(
+            Text("Note", style="bold magenta underline"),
+            ""
+        )
+        note_text = (
+            "For string parameters with spaces, enclose the value in quotes:\n"
+            "  param=\"value with spaces\"\n\n"
+            "Example: query=\"latest news about AI\""
+        )
+        table.add_row("", Text(note_text, style="yellow"))
+        
+        # Create panel with full width
+        panel = Panel(
+            table,
+            title=Text("Tool Help", style="bold white on blue"),
+            border_style="blue",
+            expand=True,
+            padding=(0, 1)
+        )
+        
+        self.console.print(panel)
+    
+    def _get_example_value(self, param_type: str, param_name: str, param_info: dict) -> str:
+        """Get an example value for a parameter based on its type.
+        
+        Args:
+            param_type: The type of the parameter.
+            param_name: The name of the parameter.
+            param_info: The parameter information.
+            
+        Returns:
+            An example value as a string.
+        """
+        if param_type == "string":
+            # Check for common parameter names to provide better examples
+            if "url" in param_name.lower():
+                return "https://example.com"
+            elif "email" in param_name.lower():
+                return "user@example.com"
+            elif "name" in param_name.lower():
+                return "example_name"
+            elif "path" in param_name.lower() or "file" in param_name.lower():
+                return "/path/to/file"
+            elif "date" in param_name.lower():
+                return "2025-07-27"
+            elif "time" in param_name.lower():
+                return "12:30:00"
+            elif "location" in param_name.lower() or "address" in param_name.lower():
+                return '"New York"'  # Quoted because it contains a space
+            elif "query" in param_name.lower() or "search" in param_name.lower() or "text" in param_name.lower():
+                return '"search terms with spaces"'  # Quoted because it likely contains spaces
+            elif "prompt" in param_name.lower() or "message" in param_name.lower() or "content" in param_name.lower():
+                return '"Example text with multiple words"'  # Quoted because it likely contains spaces
+            # Use enum values if available
+            elif "enum" in param_info:
+                enum_val = str(param_info["enum"][0])
+                # Quote enum values if they contain spaces
+                if " " in enum_val:
+                    return f'"{enum_val}"'
+                return enum_val
+            else:
+                return "example_string"
+        elif param_type == "number" or param_type == "integer":
+            if "minimum" in param_info and "maximum" in param_info:
+                return str((param_info["minimum"] + param_info["maximum"]) // 2)
+            elif "minimum" in param_info:
+                return str(param_info["minimum"])
+            elif "maximum" in param_info:
+                return str(param_info["maximum"])
+            else:
+                return "42" if param_type == "integer" else "3.14"
+        elif param_type == "boolean":
+            return "true"
+        elif param_type == "array":
+            return "item1"
+        elif param_type == "object":
+            return "key1=value1"
+        else:
+            return "example_value"
+    
     async def _cmd_execute(self, args: str) -> None:
         """Handle the execute command.
         
@@ -729,27 +917,65 @@ class ConsoleInterface:
             args: Command parameters.
             
         Format: execute <server_name> <tool_name> [arg1=val1 arg2=val2 ...]
+        Format: execute <server_name> <tool_name> help
+        
+        For string parameters with spaces, enclose the value in quotes:
+        Example: execute <server_name> <tool_name> query="search terms with spaces"
         """
         args = args.strip()
         parts = args.split()
         
         if len(parts) < 2:
             self.console.print("[red]Error: Invalid format. "
-                              "Use: execute <server_name> <tool_name> [arg1=val1 ...][/red]")
+                              "Use: execute <server_name> <tool_name> [arg1=val1 ...] or "
+                              "execute <server_name> <tool_name> help[/red]")
             return
         
         server_name = parts[0]
         tool_name = parts[1]
         
-        # Parse parameters
-        tool_args = {}
-        for arg in parts[2:]:
-            if "=" not in arg:
-                self.console.print(f"[red]Error: Invalid argument format: {arg}. "
-                                  "Use: key=value[/red]")
+        # Check if this is a help request
+        if len(parts) == 3 and parts[2].lower() == "help":
+            server = self.server_manager.get_server(server_name)
+            if not server:
+                self.console.print(f"[red]Error: Server '{server_name}' not found[/red]")
                 return
             
-            key, value = arg.split("=", 1)
+            if not server.is_connected:
+                self.console.print(f"[red]Error: Server '{server_name}' is not connected[/red]")
+                return
+            
+            tool = server.get_tool(tool_name)
+            if not tool:
+                self.console.print(f"[red]Error: Tool '{tool_name}' not found on server '{server_name}'[/red]")
+                return
+            
+            # Display help information for the tool
+            self._format_tool_help(tool, server_name)
+            return
+        
+        # Parse parameters with proper handling of quoted strings
+        tool_args = {}
+        
+        # Join the remaining parts back into a single string for proper parsing
+        args_str = ' '.join(parts[2:])
+        
+        # Use a regex pattern to match key=value pairs, handling quoted values
+        pattern = r'(\w+)=("(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|[^\s]+)'
+        matches = re.findall(pattern, args_str)
+        
+        if not matches and args_str.strip():
+            # If we have args but no matches, there might be a syntax error
+            self.console.print("[red]Error: Could not parse arguments. "
+                              "Use format: key=value or key=\"value with spaces\"[/red]")
+            return
+        
+        for key, value in matches:
+            # Remove quotes from quoted values
+            if (value.startswith('"') and value.endswith('"')) or \
+               (value.startswith("'") and value.endswith("'")):
+                value = value[1:-1]
+            
             # Try to parse JSON-like values
             if value.lower() == "true":
                 value = True
@@ -777,358 +1003,62 @@ class ConsoleInterface:
             return
         
         try:
-            # Use a new context for the status indicator to ensure it's properly managed
-            status_context = self.console.status(f"[bold green]Executing {tool_name} on {server_name}...[/bold green]")
-            status_context.__enter__()
+            # Execute the tool with nice formatting
+            # The formatting will be handled by the ServerManager.execute_tool method
+            result = await self.server_manager.execute_tool(
+                tool_name=tool_name,
+                arguments=tool_args,
+                server_name=server_name,
+                print_formatting=True
+            )
             
-            try:
-                result = await server.execute_tool(tool_name, tool_args)
-                # Exit the status context before printing results
-                status_context.__exit__(None, None, None)
-                
-                # Pretty print the result
-                if isinstance(result, str):
-                    self.console.print(Panel(result, title=f"Result: {tool_name}", border_style="green"))
-                else:
-                    formatted_result = self._serialize_complex_object(result)
-                    self.console.print(Panel(formatted_result, title=f"Result: {tool_name}", border_style="green"))
-            except Exception as e:
-                # Make sure status is cleared even on error
-                status_context.__exit__(None, None, None)
-                self.console.print(f"[red]Error executing tool: {str(e)}[/red]")
-        except Exception as outer_e:
-            # Handle any issues with the status context itself
-            self.console.print(f"[red]Error setting up execution environment: {str(outer_e)}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]Error executing tool: {str(e)}[/red]")
     
     async def _cmd_chat(self, args: str) -> None:
-        """Handle the chat command.
+        """Handle the chat command with ReAct agent integration.
         
         Args:
             args: Command parameters.
         """
-        if not self.llm_provider:
-            self.console.print("[red]Error: No LLM provider configured[/red]")
-            return
-        
-        connected_servers = self.server_manager.get_connected_servers()
-        if not connected_servers:
-            self.console.print("[yellow]Warning: No MCP servers connected. "
-                              "Tools will not be available.[/yellow]")
-        
-        # Create system message with available tools
-        all_tools = self.server_manager.get_all_tools()
-        
-        # Format tools for the system prompt
-        # Either use the enhanced formatter or fall back to the basic one
-        try:
-            tools_description = generate_tool_format(all_tools)
-        except Exception as e:
-            self.console.print(f"Warning using enhanced tool formatting, falling back to basic: {str(e)}")
-            # Fall back to basic formatting
-            tools_description = ""
-            for server_name, tools in all_tools.items():
-                tools_description += f"Server: {server_name}\n\n"
-                for tool in tools:
-                    tools_description += tool.format_for_llm() + "\n"
-
-        # Generate the enhanced modular system prompt
-        system_prompt = generate_system_prompt(
-            available_tools=tools_description,
-            include_mcp_guidance=True,
-            include_react_guidance=True
+        from .chat_utils import (
+            initialize_mcp_client, create_react_agent, display_chat_header,
+            run_chat_loop, cleanup_chat_resources
         )
-
-        self.llm_provider.set_system_message(system_prompt)
         
-        # count tools
-        tool_count = 0
-        for server_name, tools in all_tools.items():
-            for tool in tools:
-                tool_count += 1
-
-        self.console.print(Panel.fit(
-            f"[bold green]Chat mode started with {self.llm_provider.name} ({self.llm_provider.model})[/bold green]\n"
-            f"Connected servers: {', '.join(s.name for s in connected_servers)}\n"
-            f"Available tools: {tool_count}\n"
-            f"Type [bold]exit[/bold] to return to command mode",
-            title="MCP Chat"
-        ))
+        mcp_adapter = None
+        react_agent = None
         
-        messages = [{"role": "system", "content": system_prompt}]
+        try:
+            # Initialize MCP client adapter
+            try:
+                with self.console.status("[bold green]Initializing MCP client...[/bold green]"):
+                    mcp_adapter = await initialize_mcp_client(self.server_manager)
+            except RuntimeError as e:
+                self.console.print(f"[red]Error: {str(e)}[/red]")
+                return
+            
+            # Create and initialize ReAct agent
+            try:
+                with self.console.status("[bold green]Creating ReAct agent and loading MCP tools...[/bold green]"):
+                    react_agent = await create_react_agent(self.config, mcp_adapter)
+            except RuntimeError as e:
+                self.console.print(f"[red]Error: {str(e)}[/red]")
+                return
+            
+            # Display chat header
+            display_chat_header(self.console, react_agent, mcp_adapter)
+            
+            # Run the chat loop
+            await run_chat_loop(self.console, react_agent, mcp_adapter, self.session)
+            
+        except Exception as e:
+            self.console.print(f"[red]Unexpected error in chat mode: {str(e)}[/red]")
+            logging.error(f"Unexpected error in chat mode: {e}")
         
-        # Chat loop
-        while True:
-            # Get user input
-            try:
-                user_input = await self.session.prompt_async(
-                    HTML("<ansicyan><b>You:</b></ansicyan> "),
-                    style=self.style
-                )
-            except (EOFError, KeyboardInterrupt):
-                self.console.print("\n[yellow]Exiting chat mode...[/yellow]")
-                break
-            
-            user_input = user_input.strip()
-            if user_input.lower() == "exit":
-                self.console.print("[yellow]Exiting chat mode...[/yellow]")
-                break
-            
-            if not user_input:
-                continue
-            
-            messages.append({"role": "user", "content": user_input})
-            
-            # Get LLM response - use explicit context management to avoid conflicts
-            try:
-                status = self.console.status("[bold green]Thinking...[/bold green]")
-                status.__enter__()
-                llm_response = await self.llm_provider.get_response(messages)
-                status.__exit__(None, None, None)
-            except Exception as e:
-                # Ensure status is cleared even on error
-                try:
-                    status.__exit__(None, None, None)
-                except:
-                    pass
-                self.console.print(f"[red]Error getting LLM response: {str(e)}[/red]")
-                continue
-            
-            pattern = r'```json([\s\S]*?)```'
-            match = re.search(pattern, llm_response)
-
-            if match:
-                llm_response = match.group(1).strip()
-                print(llm_response)
-
-            # Translate tool format if needed
-            def translate_tool_format(text):
-                """
-                Translate from simple format to nested JSON if the first line is a tool name.
-
-                FROM:
-                filesystem_list_directory
-                {"path": "/home"}
-
-                TO:
-                {
-                "tool": "filesystem_list_directory",
-                "parameters": {
-                    "path": "/home"
-                }
-                }
-                """
-                lines = text.strip().split('\n', 1)
-                if len(lines) < 2:
-                    return text
-
-                potential_tool_name = lines[0].strip()
-                potential_params = lines[1].strip()
-
-                # Check if first line looks like a tool name (no spaces, no JSON characters)
-                if ' ' in potential_tool_name or '{' in potential_tool_name or '}' in potential_tool_name:
-                    return text
-
-                # Try to parse the second part as JSON
-                try:
-                    params = json.loads(potential_params)
-                    # Create the new format
-                    transformed = {
-                        "tool": potential_tool_name,
-                        "parameters": params
-                    }
-                    return json.dumps(transformed)
-                except json.JSONDecodeError:
-                    return text
-
-            # Apply translation if needed
-            llm_response = translate_tool_format(llm_response)
-
-            # Check if response is a tool call
-            try:
-                is_tool_call = False
-                try:
-                    tool_call = json.loads(llm_response)
-                    is_tool_call = True
-                except json.JSONDecodeError:
-                    is_tool_call = False
-                
-                if is_tool_call:
-                    if 'parameters' not in tool_call:
-                        tool_call['parameters'] = {}
-
-                    self.console.print(Panel(
-                        f"[bold]Executing tool:[/bold] {tool_call['tool']}\n"
-                        + (f"[bold]With parameters:[/bold] {json.dumps(tool_call['parameters'], indent=2)}" if 'parameters' in tool_call else ""),
-                        title="Assistant",
-                        border_style="yellow"
-                    ))
-                    
-                    try:
-                        # Execute the tool
-                        self.console.print(f"[bold green]Executing {tool_call['tool']}...[/bold green]")
-                        result = await self.server_manager.execute_tool(
-                            tool_call["tool"],
-                            tool_call["parameters"]
-                        )
-                        
-                        # Add assistant message to history
-                        messages.append({"role": "assistant", "content": llm_response})
-                        
-                        # Prepare the tool result
-                        if isinstance(result, str):
-                            formatted_result = result
-                        else:
-                            formatted_result = self._serialize_complex_object(result)
-                        
-                        # Create a new system prompt that combines the user query with the tool result
-                        new_system_prompt = (
-                            "You are a helpful assistant with access to tools. "
-                            "A tool has been called based on the user's question, and the result is provided below. "
-                            "Create a natural, conversational response that incorporates this tool result. "
-                            "If you need to call additional tools to fully answer the question, respond ONLY with a "
-                            "JSON object in the format: {\"tool\": \"tool-name\", \"parameters\": {\"key\": \"value\"}}. "
-                            "Otherwise, provide a complete and helpful response that addresses the user's original question "
-                            "using the tool result.\n\n"
-                            f"User's original question: {user_input}\n\n"
-                            f"Tool called: {tool_call['tool']}\n"
-                            f"Tool result: {formatted_result}"
-                        )
-                        
-                        # Replace the original system message temporarily for this response
-                        #original_system_message = messages[0]["content"]
-                        #messages[0]["content"] = new_system_prompt
-                        
-                        messages.append({"role": "user", "content": formatted_result})
-
-                        # Get final response from LLM
-                        self.console.print("[bold green]Processing result...[/bold green]")
-                        final_response = await self.llm_provider.get_response(messages)
-                        
-                        # Check if the final response is another tool call
-                        try:
-                            is_another_call = False
-                            try:
-                                another_tool_call = json.loads(final_response)
-                                is_another_call = True
-                            except json.JSONDecodeError:
-                                is_another_call = False
-
-                            if is_another_call:
-                                # It's another tool call, so we'll display it as such
-                                self.console.print(Panel(
-                                    f"[bold]Assistant needs to call another tool:[/bold] {another_tool_call['tool']}\n"
-                                    f"[bold]With parameters:[/bold] {json.dumps(another_tool_call['parameters'], indent=2)}",
-                                    title="Assistant",
-                                    border_style="yellow"
-                                ))
-                                
-                                # Execute the second tool
-                                self.console.print(f"[bold green]Executing {another_tool_call['tool']}...[/bold green]")
-                                second_result = await self.server_manager.execute_tool(
-                                    another_tool_call["tool"],
-                                    another_tool_call["parameters"]
-                                )
-                                
-                                # Format the result
-                                if isinstance(second_result, str):
-                                    second_formatted_result = second_result
-                                else:
-                                    second_formatted_result = self._serialize_complex_object(second_result)
-                                
-                                # Update the system prompt to include both tool results
-                                combined_system_prompt = (
-                                    "You are a helpful assistant with access to tools. "
-                                    "Two tools have been called based on the user's question, and the results are provided below. "
-                                    "Create a natural, conversational response that incorporates these tool results. "
-                                    "Focus on providing a complete and helpful response that addresses the user's original question.\n\n"
-                                    f"User's original question: {user_input}\n\n"
-                                    f"First tool called: {tool_call['tool']}\n"
-                                    f"First tool result: {formatted_result}\n\n"
-                                    f"Second tool called: {another_tool_call['tool']}\n"
-                                    f"Second tool result: {second_formatted_result}"
-                                )
-                                
-                                # Update the system message
-                                #messages[0]["content"] = combined_system_prompt
-                                
-                                messages.append({"role": "user", "content": second_formatted_result})
-
-                                # Get the combined final response
-                                self.console.print("[bold green]Processing combined results...[/bold green]")
-                                combined_final_response = await self.llm_provider.get_response(messages)
-                                
-                                self.console.print(Panel(
-                                    Markdown(combined_final_response),
-                                    title="Assistant",
-                                    border_style="green"
-                                ))
-                                
-                                # Add final response to messages
-                                messages.append({"role": "assistant", "content": combined_final_response})
-                                
-                                # Restore original system message
-                                #messages[0]["content"] = original_system_message
-                                
-                            else:
-                                # Not a tool call, display the response
-                                self.console.print(Panel(
-                                    Markdown(final_response),
-                                    title="Assistant",
-                                    border_style="green"
-                                ))
-                                
-                                # Add final response to messages
-                                messages.append({"role": "assistant", "content": final_response})
-                                
-                                # Restore original system message
-                                #messages[0]["content"] = original_system_message
-                                
-                        except json.JSONDecodeError:
-                            # Not a tool call (not valid JSON), display response directly
-                            self.console.print(Panel(
-                                Markdown(final_response),
-                                title="Assistant",
-                                border_style="green"
-                            ))
-                            
-                            # Add final response to messages
-                            messages.append({"role": "assistant", "content": final_response})
-                            
-                            # Restore original system message
-                            #messages[0]["content"] = original_system_message
-                        
-                    except Exception as e:
-                        error_msg = f"Error executing tool: {str(e)}"
-                        self.console.print(f"[red]{error_msg}[/red]")
-                        
-                        # Add error as system message
-                        messages.append({"role": "system", "content": error_msg})
-                        
-                else:
-                    # Not a tool call, display response directly
-                    self.console.print(Panel(
-                        Markdown(llm_response),
-                        title="Assistant",
-                        border_style="green"
-                    ))
-                    
-                    # Add response to messages
-                    messages.append({"role": "assistant", "content": llm_response})
-            
-            except Exception as e:
-                # Handle any error in the tool execution flow
-                self.console.print(f"[red]Error processing response: {str(e)}[/red]")
-                
-                # Display the original response if possible
-                if 'llm_response' in locals():
-                    self.console.print(Panel(
-                        Markdown(llm_response),
-                        title="Assistant (Error Processing)",
-                        border_style="red"
-                    ))
-                    
-                    # Add response to messages
-                    messages.append({"role": "assistant", "content": llm_response})
+        finally:
+            # Clean up resources
+            await cleanup_chat_resources(mcp_adapter, react_agent)
     
     async def _cmd_config(self, args: str) -> None:
         """Handle the config command.
