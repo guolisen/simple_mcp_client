@@ -14,6 +14,7 @@ from ..mcp.langchain_adapter import MCPLangChainAdapter
 from ..llm.react_agent import ReactAgentProvider
 from ..prompt.system import generate_system_prompt, generate_tool_format
 from .tool_formatter import format_tool_call_markdown, format_tool_result_markdown
+from langchain_core.messages import BaseMessage, ToolMessage, HumanMessage, SystemMessage, AIMessage
 
 
 async def initialize_mcp_client(server_manager: ServerManager) -> MCPLangChainAdapter:
@@ -80,7 +81,8 @@ async def create_react_agent(config: Configuration, mcp_adapter: MCPLangChainAda
         system_prompt = generate_system_prompt(
             available_tools=tools_description,
             include_mcp_guidance=True,
-            include_react_guidance=True
+            include_react_guidance=True,
+            config=config
         )
         
         react_agent.set_system_message(system_prompt)
@@ -350,8 +352,49 @@ async def run_chat_loop(console: Console, react_agent: ReactAgentProvider,
                                 tool_data = parsed_chunk["data"]
                                 server_name = parsed_chunk.get("server_name", "unknown")
                                 
-                                # Check if this is a tool call or tool result
-                                if "name" in tool_data and "args" in tool_data:
+                                # Extract ToolMessage from messages array
+                                if "messages" in tool_data and len(tool_data["messages"]) > 0:
+                                    # Get the first ToolMessage
+                                    tool_message = tool_data["messages"][0]
+                                    
+                                    # Check if it's a ToolMessage object with content and name
+                                    if hasattr(tool_message, 'content') and hasattr(tool_message, 'name'):
+                                        # Extract tool name
+                                        tool_name = tool_message.name
+                                        
+                                        # Parse the content which is a JSON string
+                                        try:
+                                            tool_result = json.loads(tool_message.content)
+                                        except (json.JSONDecodeError, TypeError):
+                                            # If parsing fails, use the content as is
+                                            tool_result = tool_message.content
+                                        
+                                        # Log the tool result
+                                        logging.info(f"Processing ToolMessage result for {tool_name}: {tool_result}")
+                                        
+                                        # Display the tool result if we have a current tool call
+                                        if current_tool_call:
+                                            # Temporarily clear the status to show tool result
+                                            status.stop()
+                                            
+                                            # Format and display tool result
+                                            default_formatter.print_tool_result(
+                                                current_tool_call["server_name"],
+                                                current_tool_call["tool_name"],
+                                                tool_result,
+                                                current_tool_call["start_time"],
+                                                datetime.now(),
+                                                success=True
+                                            )
+                                            
+                                            # Reset current tool call
+                                            current_tool_call = None
+                                            
+                                            # Resume the status
+                                            status.start()
+                                
+                                # Handle original format for tool calls
+                                elif "name" in tool_data and "args" in tool_data:
                                     # Tool call
                                     tool_name = tool_data["name"]
                                     tool_args = tool_data["args"]
@@ -374,7 +417,8 @@ async def run_chat_loop(console: Console, react_agent: ReactAgentProvider,
                                     
                                     # Resume the status
                                     status.start()
-                                    
+                                
+                                # Handle original format for tool results
                                 elif "output" in tool_data and current_tool_call:
                                     # Tool result
                                     tool_result = tool_data["output"]

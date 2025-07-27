@@ -115,14 +115,14 @@ class ToolCallFormatter:
         return "✓ " if success else "✗ "
     
     def _format_json(self, data: Any, indent: int = 2, max_depth: Optional[int] = None, 
-                    truncate_length: Optional[int] = None) -> Text:
+                    truncate_length: Optional[Union[int, str]] = None) -> Text:
         """Format data as JSON with pretty printing and optional truncation.
         
         Args:
             data: The data to format.
             indent: Number of spaces for indentation.
             max_depth: Maximum depth for nested objects.
-            truncate_length: Maximum length for string values.
+            truncate_length: Maximum length for string values or "all" for no truncation.
             
         Returns:
             Formatted JSON string.
@@ -130,6 +130,12 @@ class ToolCallFormatter:
         # Use config values or defaults
         max_depth = max_depth if max_depth is not None else self.config.max_depth
         truncate_length = truncate_length if truncate_length is not None else self.config.truncate_length
+        
+        # Check if truncate_length is "all" - meaning no truncation
+        should_truncate = truncate_length != "all" if isinstance(truncate_length, str) else True
+        
+        # Use truncate_length as an integer only if we should truncate
+        int_truncate_length = int(truncate_length) if should_truncate and not isinstance(truncate_length, str) else None
         
         class CustomEncoder(json.JSONEncoder):
             def __init__(self, *args, **kwargs):
@@ -152,6 +158,10 @@ class ToolCallFormatter:
             if isinstance(data, (dict, list)):
                 # Convert to JSON string
                 json_str = json.dumps(data, indent=indent, ensure_ascii=False, cls=CustomEncoder)
+                
+                # Truncate the entire JSON string if needed
+                if should_truncate and int_truncate_length and len(json_str) > int_truncate_length:
+                    json_str = json_str[:int_truncate_length] + "...\n[Output truncated. Set truncate_length: \"all\" to see complete output]"
                 
                 # Create rich Text object with syntax highlighting
                 result = Text()

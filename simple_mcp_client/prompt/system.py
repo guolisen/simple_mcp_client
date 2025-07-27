@@ -7,14 +7,33 @@ React loop guidance, and more.
 
 from typing import Dict, List, Optional, Any
 
+from ..config import Configuration
 from ..mcp.server import Tool
 
 
-def get_introduction() -> str:
-    """Get the introduction section of the system prompt."""
-    return """You are MCP client, an AI assistant specialized in Kubernetes cluster management and cloud infrastructure operations. You have deep knowledge of container orchestration, deployment strategies, networking, and cloud environments.
+def get_introduction(config: Optional[Configuration] = None) -> str:
+    """Get the introduction section of the system prompt.
+    
+    Args:
+        config: Optional configuration object containing custom introduction text.
+        
+    Returns:
+        The introduction section of the system prompt.
+    """
+    default_intro = """You are MCP client, an AI assistant specialized in Kubernetes cluster management and cloud infrastructure operations. You have deep knowledge of container orchestration, deployment strategies, networking, and cloud environments.
 
 ===="""
+    
+    if config and hasattr(config.config, "prompts") and config.config.prompts.base_introduction:
+        # Use the configured introduction text
+        intro_text = config.config.prompts.base_introduction
+        # Ensure the introduction ends with the separator
+        if not intro_text.endswith("===="):
+            intro_text += "\n\n===="
+        return intro_text
+    
+    # Fall back to default introduction
+    return default_intro
 
 
 def get_react_loop_guidance() -> str:
@@ -147,6 +166,7 @@ def generate_system_prompt(
     available_tools: str,
     include_mcp_guidance: bool = True,
     include_react_guidance: bool = True,
+    config: Optional[Configuration] = None,
 ) -> str:
     """Generate a complete system prompt with all components.
     
@@ -154,12 +174,13 @@ def generate_system_prompt(
         available_tools: String describing available tools.
         include_mcp_guidance: Whether to include MCP guidance.
         include_react_guidance: Whether to include ReAct guidance.
+        config: Optional configuration object containing custom prompt settings.
         
     Returns:
         Complete system prompt as a string.
     """
     # Start with introduction
-    prompt_parts = [get_introduction()]
+    prompt_parts = [get_introduction(config)]
     
     # Add optional sections
     if include_react_guidance:

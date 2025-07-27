@@ -299,29 +299,11 @@ class ConsoleInterface:
             self.console.print(f"[red]Error: Server '{server_name}' not found[/red]")
             return
         
-        with self.console.status(f"[bold green]Connecting to {server_name}...[/bold green]"):
-            success = await self.server_manager.connect_server(server_name)
+        # Import the display_server_connection_message function from main module
+        from ..main import display_server_connection_message
         
-        if success:
-            server = self.server_manager.get_server(server_name)
-            if not server:
-                self.console.print("[red]Error: Failed to get server reference[/red]")
-                return
-            
-            info = server.server_info
-            if info:
-                self.console.print(
-                    f"[green]Connected to {server_name} "
-                    f"({info.name} v{info.version})[/green]"
-                )
-            else:
-                self.console.print(f"[green]Connected to {server_name}[/green]")
-            
-            # Show available tools
-            if server.tools:
-                self.console.print(f"Available tools: {len(server.tools)}")
-        else:
-            self.console.print(f"[red]Failed to connect to {server_name}[/red]")
+        # Use the enhanced connection message display
+        await display_server_connection_message(self.console, self.server_manager, server_name)
     
     async def _cmd_disconnect(self, args: str) -> None:
         """Handle the disconnect command.

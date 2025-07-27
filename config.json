@@ -12,13 +12,16 @@
       "request_timeout": 60.0
     }
   },
+  "prompts": {
+    "base_introduction": "You are MCP client, an AI assistant specialized in Kubernetes cluster management and cloud infrastructure operations. You have deep knowledge of container orchestration, deployment strategies, networking, and cloud environments."
+  },
   "console": {
     "tool_formatting": {
       "enabled": true,
       "color": true,
       "compact": false,
       "max_depth": 3,
-      "truncate_length": 100,
+      "truncate_length": 300,
       "syntax_highlighting": true,
       "align_columns": true,
       "show_icons": true,

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 
 
 class LLMConfig(BaseModel):
@@ -33,11 +33,23 @@ class ToolFormattingConfig(BaseModel):
     color: bool = True  # Whether to use colors in formatting
     compact: bool = False  # Whether to use compact formatting
     max_depth: int = 3  # Maximum depth for nested objects
-    truncate_length: int = 100  # Maximum length for string values
+    truncate_length: Union[int, str] = 100  # Maximum length for string values or "all" for no truncation
     syntax_highlighting: bool = True  # Whether to use syntax highlighting for JSON
     align_columns: bool = True  # Whether to align columns in tables
     show_icons: bool = True  # Whether to show icons for status
     color_scheme: str = "default"  # Color scheme to use (default, dark, light, monochrome)
+    
+    @validator('truncate_length')
+    def validate_truncate_length(cls, v):
+        """Validate that truncate_length is either an integer or the string 'all'."""
+        if isinstance(v, str) and v.lower() != 'all':
+            raise ValueError('truncate_length must be either an integer or the string "all"')
+        return v
+
+
+class PromptConfig(BaseModel):
+    """Configuration for system prompts."""
+    base_introduction: Optional[str] = None  # Base introduction system prompt
 
 
 class ConsoleConfig(BaseModel):
@@ -50,6 +62,7 @@ class ClientConfig(BaseModel):
     llm: LLMConfig
     mcpServers: Dict[str, ServerConfig]
     console: ConsoleConfig = Field(default_factory=ConsoleConfig)
+    prompts: PromptConfig = Field(default_factory=PromptConfig)
 
 
 class Configuration:

@@ -30,7 +30,13 @@
       "align_columns": true,
       "show_icons": true,
       "color_scheme": "default"
+    },
+    "comments": {
+      "truncate_length": "Use integer for max length or 'all' to show complete results without truncation"
     }
+  },
+  "prompts": {
+    "base_introduction": "You are MCP client, an AI assistant specialized in Kubernetes cluster management and cloud infrastructure operations. You have deep knowledge of container orchestration, deployment strategies, networking, and cloud environments."
   },
   "default_server": "k8s"
 }
