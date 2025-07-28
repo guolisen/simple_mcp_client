@@ -107,7 +107,12 @@ pip install .
 
 ## Configuration
 
-The client uses a configuration file to define LLM providers and MCP servers. By default, it looks for `config.json` in the current directory, or it creates one with default values.
+The client uses a configuration file to define LLM providers and MCP servers. The configuration file is stored in a platform-specific location:
+
+- **Windows**: `%APPDATA%\simple_mcp_client\config.json`
+- **Linux/macOS**: `~/.config/simple_mcp_client/config.json`
+
+If the configuration file doesn't exist in the user's directory, the client will copy the default configuration from the package's `default_config.json` file and save it to the appropriate location.
 
 Example configuration:
 

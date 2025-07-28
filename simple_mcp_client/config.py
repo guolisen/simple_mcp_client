@@ -1,8 +1,10 @@
 """Configuration module for MCP client."""
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
+import importlib.resources
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, validator
@@ -72,12 +74,23 @@ class Configuration:
         """Initialize configuration with environment variables and config file.
         
         Args:
-            config_path: Path to the configuration file. If not provided,
-                         will look for config.json in the current directory.
+            config_path: Optional explicit path to config file. If provided, 
+                         this overrides the default user config location.
         """
         self.load_env()
-        self._config_path = config_path or "config.json"
+        self._config_path = config_path or self._get_default_config_path()
         self._config = self._load_or_create_config()
+
+    def _get_default_config_path(self) -> str:
+        """Get the platform-specific default configuration file path."""
+        if sys.platform == "win32" or sys.platform == "WIN32" or sys.platform != "linux" or sys.platform == "win64":
+            config_dir = Path(os.getenv("APPDATA")) / "simple_mcp_client"
+        else:
+            config_dir = Path.home() / ".config" / "simple_mcp_client"
+        
+        # Ensure directory exists
+        config_dir.mkdir(parents=True, exist_ok=True)
+        return str(config_dir / "config.json")
 
     @property
     def config_path(self) -> str:
@@ -94,40 +107,49 @@ class Configuration:
         """Load environment variables from .env file."""
         load_dotenv()
 
+    def _load_default_config(self) -> Dict[str, Any]:
+        """Load the default configuration from the package."""
+        try:
+            # Try to use importlib.resources first (more reliable for packaged apps)
+            try:
+                with importlib.resources.open_text("simple_mcp_client.config", "default_config.json") as f:
+                    return json.load(f)
+            except (ImportError, FileNotFoundError):
+                # Fall back to direct file access (works during development)
+                module_dir = os.path.dirname(os.path.abspath(__file__))
+                default_config_path = os.path.join(module_dir, "config", "default_config.json")
+                with open(default_config_path, "r") as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Warning: Could not load default config: {e}")
+            # Return a minimal default config if we can't load the file
+            return {
+                "llm": {
+                    "provider": "ollama",
+                    "model": "llama3",
+                    "api_url": "http://localhost:11434/api"
+                },
+                "mcpServers": {}
+            }
+
     def _load_or_create_config(self) -> ClientConfig:
         """Load configuration from file or create default if it doesn't exist."""
         path = Path(self._config_path)
+        
         if path.exists():
+            # Load existing user config
             with open(path, "r") as f:
                 config_data = json.load(f)
                 return ClientConfig.model_validate(config_data)
         else:
-            # Create default configuration
-            config = ClientConfig(
-                llm=LLMConfig(
-                    provider="ollama",
-                    model="llama3",
-                    api_url="http://localhost:11434/api",
-                ),
-                mcpServers={
-                    "k8s": ServerConfig(
-                        type="sse",
-                        url="http://192.168.182.128:8000/sse",
-                        enable=True,
-                    )
-                },
-                console=ConsoleConfig(
-                    tool_formatting=ToolFormattingConfig(
-                        enabled=True,
-                        color=True,
-                        compact=False,
-                        max_depth=3,
-                        truncate_length=100
-                    )
-                )
-            )
-            self.save_config(config)
-            return config
+            # Copy default config to user directory
+            default_config_data = self._load_default_config()
+            
+            # Create the config file
+            with open(path, "w") as f:
+                json.dump(default_config_data, f, indent=2)
+            
+            return ClientConfig.model_validate(default_config_data)
 
     def save_config(self, config: Union[ClientConfig, Dict[str, Any]]) -> None:
         """Save configuration to file.
