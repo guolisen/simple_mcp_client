@@ -80,6 +80,11 @@ The chat command now displays a header with information about the agent, connect
 
 There are several ways to install the client:
 
+### Using pip
+```bash
+pip install simple-mcp-client
+```
+
 ### Using UV (recommended)
 
 Install UV
