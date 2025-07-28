@@ -54,6 +54,11 @@ class PromptConfig(BaseModel):
     base_introduction: Optional[str] = None  # Base introduction system prompt
 
 
+class LoggingConfig(BaseModel):
+    """Configuration for logging."""
+    log_path: Optional[str] = None  # Path to the log file/directory
+
+
 class ConsoleConfig(BaseModel):
     """Configuration for console interface."""
     tool_formatting: ToolFormattingConfig = Field(default_factory=ToolFormattingConfig)
@@ -65,6 +70,7 @@ class ClientConfig(BaseModel):
     mcpServers: Dict[str, ServerConfig]
     console: ConsoleConfig = Field(default_factory=ConsoleConfig)
     prompts: PromptConfig = Field(default_factory=PromptConfig)
+    logging: LoggingConfig = Field(default_factory=LoggingConfig)
 
 
 class Configuration:

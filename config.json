@@ -28,6 +28,9 @@
       "color_scheme": "light"
     }
   },
+  "logging": {
+    "log_path": null
+  },
   "mcpServers": {
     "lcu": {
       "enable": false,

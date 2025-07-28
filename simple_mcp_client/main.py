@@ -252,15 +252,34 @@ def display_welcome_message(console: Console, config: Configuration) -> None:
 #os.environ['LANGCHAIN_API_KEY'] = "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"
 #os.environ['LANGCHAIN_PROJECT'] = "pr-silver-bank-1"
 
-def setup_logging() -> None:
+def setup_logging(config: Configuration) -> None:
     """Set up logging configuration."""
     from logging.handlers import RotatingFileHandler
     
-    # Create logs directory if it doesn't exist
-    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
-    os.makedirs(log_dir, exist_ok=True)
+    # Get log path from config or use default
+    log_path = None
+    if hasattr(config.config, "logging") and config.config.logging.log_path:
+        log_path = config.config.logging.log_path
     
-    log_file = os.path.join(log_dir, "mcp_client.log")
+    # If no log path specified, use default in the same directory as config file
+    if not log_path:
+        # Get config directory
+        config_dir = os.path.dirname(config.config_path)
+        # Create logs directory in the same directory as config file
+        log_dir = os.path.join(config_dir, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "mcp_client.log")
+    else:
+        # If log path is a directory, append default filename
+        if os.path.isdir(log_path) or not os.path.splitext(log_path)[1]:
+            os.makedirs(log_path, exist_ok=True)
+            log_path = os.path.join(log_path, "mcp_client.log")
+        else:
+            # Ensure directory exists for the log file
+            log_dir = os.path.dirname(log_path)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
+    
     log_level = os.environ.get("MCP_LOG_LEVEL", "INFO").upper()
     log_format = "%(asctime)s - %(levelname)s - %(name)s - %(message)s"
     
@@ -271,7 +290,7 @@ def setup_logging() -> None:
         handlers=[
             # Use RotatingFileHandler to prevent log files from growing too large
             RotatingFileHandler(
-                log_file,
+                log_path,
                 maxBytes=10*1024*1024,  # 10MB
                 backupCount=5,
                 encoding='utf-8'
@@ -280,7 +299,7 @@ def setup_logging() -> None:
     )
     
     # Log startup information
-    logging.info("Logging configured to write to %s", log_file)
+    logging.info("Logging configured to write to %s", log_path)
 
 
 async def handle_command(
@@ -485,7 +504,7 @@ async def run_client() -> None:
     console = Console()
     
     try:
-        # Load configuration
+        # Load configuration (already loaded in main())
         config = Configuration()
         
         # Initialize tool formatter with configuration
@@ -548,7 +567,12 @@ async def run_client() -> None:
 
 def main() -> None:
     """Main entry point for the client."""
-    setup_logging()
+    # Load configuration
+    config = Configuration()
+    
+    # Setup logging with configuration
+    setup_logging(config)
+    
     asyncio.run(run_client())
 
 
