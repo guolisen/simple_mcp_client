@@ -23,7 +23,7 @@ from simple_mcp_client.console.tool_formatter import update_formatter_config
 from simple_mcp_client.mcp import ServerManager
 
 # Version information
-__version__ = "1.0.0"
+__version__ = "1.0.10"
 
 def display_welcome_message(console: Console, config: Configuration) -> None:
     """Display a colorful welcome message with elaborate ASCII art banner and additional information.

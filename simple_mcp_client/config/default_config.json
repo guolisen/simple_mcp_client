@@ -1,8 +1,8 @@
 {
   "llm": {
     "provider": "openai",
-    "_model": "grok-3-mini",
-    "model": "qwen3-235b-a22b",
+    "model": "grok-3-mini",
+    "_model": "qwen3-235b-a22b",
     "api_url": "https://api.zhizengzeng.com/v1",
     "api_key": "sk-",
     "other_params": {
@@ -53,7 +53,10 @@
       "type": "stdio",
       "url": "",
       "command": "npx",
-      "args": ["-y","tavily-mcp@0.1.4"],
+      "args": [
+        "-y",
+        "tavily-mcp@0.1.4"
+      ],
       "env": {
         "TAVILY_API_KEY": "tvly-dev-"
       }
@@ -65,6 +68,16 @@
       "command": "",
       "args": [],
       "env": {}
+    },
+    "sequential-thinking": {
+      "enable": true,
+      "type": "stdio",
+      "url": "",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
     },
     "Jira": {
       "enable": false,
