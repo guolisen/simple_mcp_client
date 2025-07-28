@@ -353,6 +353,10 @@ get-prompt k8s k8s-describe namespace=default resource=pod name=my-pod
 - `COHERE_API_KEY`: Cohere API key (for LiteLLM with Cohere models)
 - `AZURE_API_KEY`: Azure API key (for LiteLLM with Azure models)
 
+## Recommended Models
+
+We recommend using large models that support MCP calls, such as Qwen3 or Grok3, Grok4.
+
 ## LLM Providers
 
 The client supports the following LLM providers:
