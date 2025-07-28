@@ -26,7 +26,16 @@ This branch introduces a ReAct (Reasoning and Acting) agent that enhances the ch
 - **Enhanced Chat Experience**: Clear visualization of agent reasoning and tool execution processes
 - **Configurable Settings**: Customizable timeout and maximum iterations for agent operations
 
-### Enhanced Chat Command
+```mermaid
+flowchart TD
+    START([START]) --> call_model[Call LLM Model]
+    call_model --> decision{Should End?}
+    decision -->|"tools"| tools[Execute Tools]
+    decision -->|"end"| END([END])
+    tools --> call_model
+```
+
+### Chat Command
 
 The `chat` command has been significantly improved with the ReAct agent integration:
 
