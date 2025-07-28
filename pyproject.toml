@@ -52,7 +52,7 @@ simple-mcp-client = "simple_mcp_client.main:main"
 "Bug Tracker" = "https://github.com/guolisen/simple-mcp-client/issues"
 
 [tool.setuptools]
-packages = ["simple_mcp_client"]
+packages = { find = {} }  # This will find all packages automatically
 include-package-data = true
 
 [tool.setuptools.package-data]
